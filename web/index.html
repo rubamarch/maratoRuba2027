@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Marató 2027</title>
+  <meta name="description" content="Pla d'entrenament adaptatiu per a la Marató Vies Verdes 2027">
+  <meta name="theme-color" content="#0f3d2a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="appbar">
+    <a class="brand" href="#avui" aria-label="Inici">
+      <span class="brand-mark" aria-hidden="true">42</span>
+      <span class="brand-txt"><b>Marató Vies Verdes</b><small id="brandSub">Girona · 2027</small></span>
+    </a>
+    <div class="appbar-r">
+      <span class="sync" id="sync" title="Estat de sincronització"></span>
+      <a class="iconbtn" href="#ajustos" aria-label="Ajustos">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.7 7.7 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <nav class="tabbar" aria-label="Seccions">
+    <a href="#avui" data-tab="avui"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 10v10h6v-6h6v6h6V10z"/></svg><span>Avui</span></a>
+    <a href="#setmana" data-tab="setmana"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5z"/></svg><span>Setmana</span></a>
+    <a href="#pla" data-tab="pla"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z"/></svg><span>Pla</span></a>
+    <a href="#progres" data-tab="progres"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7z"/></svg><span>Progrés</span></a>
+    <a href="#ritmes" data-tab="ritmes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7zm1 2v6.6l4.2 2.4-1 1.7L11 13.7V6z"/></svg><span>Ritmes</span></a>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
