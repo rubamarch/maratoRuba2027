@@ -11,6 +11,8 @@ export const demo = !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
 let sb = null;
 
 export async function init() {
+  // Demana al navegador que no esborri les dades locals (cau i mode demo) quan falta espai.
+  try { if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch { /* no disponible */ }
   if (demo) return { user: { email: 'demo' }, owner: true };
   const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
   sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
@@ -96,6 +98,51 @@ export async function setActivity(d, id, patch) {
   if (demo) return persistDemo(d);
   chk(await sb.from('activities').update(patch).eq('id', id));
 }
+// ---- Activitats manuals i importades (pàdel, gimnàs, curses fora del pla, Strava sense connexió) ----
+const ACT_COLS = ['id', 'name', 'sport_type', 'start_date', 'start_date_local', 'distance', 'moving_time', 'elapsed_time', 'avg_hr', 'max_hr', 'elevation', 'polyline', 'splits', 'session_id', 'ignored', 'rpe', 'note', 'source'];
+const actRow = a => Object.fromEntries(ACT_COLS.filter(k => a[k] !== undefined).map(k => [k, a[k]]));
+export async function addActivities(d, list) {
+  if (!list.length) return;
+  const have = new Set(d.activities.map(a => String(a.id)));
+  const fresh = list.filter(a => !have.has(String(a.id)));
+  if (!fresh.length) return;
+  if (!demo) chk(await sb.from('activities').upsert(fresh.map(actRow), { onConflict: 'id', ignoreDuplicates: true }));
+  d.activities.push(...fresh);
+  if (demo) persistDemo(d);
+}
+export async function deleteActivity(d, id) {
+  d.activities = d.activities.filter(a => String(a.id) !== String(id));
+  if (demo) return persistDemo(d);
+  chk(await sb.from('activities').delete().eq('id', id));
+}
+
+// ---- Còpia de seguretat ----
+export function exportAll(d) {
+  return JSON.stringify({ app: 'marato27', version: 1, exported: new Date().toISOString(), ...d, strava: undefined }, null, 1);
+}
+export async function importAll(d, j) {
+  if (!j || j.app !== 'marato27') throw new Error('Aquest fitxer no és una còpia del pla.');
+  const logs = j.logs || {}, moves = j.moves || {}, weeks = j.weeks || {};
+  const tests = j.tests || [], acts = j.activities || [];
+  if (demo) {
+    Object.assign(d.settings, j.settings || {}); Object.assign(d.logs, logs); Object.assign(d.moves, moves); Object.assign(d.weeks, weeks);
+    const tIds = new Set(d.tests.map(t => String(t.id))); d.tests.push(...tests.filter(t => !tIds.has(String(t.id))));
+    const aIds = new Set(d.activities.map(a => String(a.id))); d.activities.push(...acts.filter(a => !aIds.has(String(a.id))));
+    return persistDemo(d);
+  }
+  if (j.settings) { const { race_date, goal_pace, adapt } = j.settings; chk(await sb.from('settings').update({ race_date, goal_pace, adapt, updated_at: new Date().toISOString() }).eq('id', 1)); }
+  const lr = Object.entries(logs).map(([id, r]) => ({ session_id: id, done: !!r.done, km: r.km ?? null, min: r.min ?? null, rpe: r.rpe ?? null, note: r.note ?? null }));
+  if (lr.length) chk(await sb.from('logs').upsert(lr));
+  const mr = Object.entries(moves).map(([id, date]) => ({ session_id: id, date }));
+  if (mr.length) chk(await sb.from('moves').upsert(mr));
+  const wr = Object.values(weeks).map(w => ({ week: w.week, padel_sat: !!w.padel_sat }));
+  if (wr.length) chk(await sb.from('weeks').upsert(wr));
+  const tIds = new Set(d.tests.map(t => `${t.date}|${t.dist}|${t.secs}`));
+  const tr = tests.filter(t => !tIds.has(`${t.date}|${t.dist}|${t.secs}`)).map(({ date, dist, secs, label }) => ({ date, dist, secs, label: label ?? null }));
+  if (tr.length) chk(await sb.from('tests').insert(tr));
+  if (acts.length) chk(await sb.from('activities').upsert(acts.map(actRow), { onConflict: 'id', ignoreDuplicates: true }));
+}
+
 export async function invoke(fn, body) {
   if (demo) throw new Error('Configura Supabase per fer servir aquesta funció.');
   const { data, error } = await sb.functions.invoke(fn, { body });

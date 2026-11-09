@@ -11,11 +11,21 @@ Interfaz en catalán, plan **adaptativo**, sincronización con **Strava**, notif
 | Pantalla | Contenido |
 |---|---|
 | **Avui** | Cuenta atrás, línea de progreso por fases, sesiones de hoy, mañana, estadísticas y últimos ajustes |
-| **Setmana** | Los 7 días con cada sesión: detalle con ritmos, datos de Strava (km, tiempo, ritmo, FC, mapa y parciales), registro manual (km, minutos, esfuerzo, nota), mover a otro día y pádel del sábado |
+| **Setmana** | Los 7 días con cada sesión: detalle con ritmos, datos de Strava (km, tiempo, ritmo, FC, mapa y parciales), registro manual (km, minutos, esfuerzo, nota), mover a otro día, pádel del sábado y **+ Afegir activitat** en cualquier día (también en descanso) |
 | **Pla** | Las 5 fases y 25 semanas con el volumen ya adaptado |
 | **Progrés** | Predicción de maratón (Riegel), tests, gráfica de km (hechos, plan adaptado y plan original), historial de ajustes y carreras de Strava |
 | **Ritmes** | Zonas de ritmo, reglas de adaptación y guía (pádel, hombro, seguridad) |
 | **Ajustos** | Login, fecha de la carrera, ritmo objetivo, adaptación on/off, Strava, notificaciones, calendario, compartir e instalar |
+
+### Importar de Strava sin conectar la API
+El botón naranja **Importar de Strava** (Avui, Setmana, Progrés y Ajustos) funciona incluso en modo demo:
+pega la tabla de *Mis actividades* de strava.com o sube el `activities.csv` de la exportación gratuita de Strava.
+Las carreras marcan la sesión del día, el pádel y el gimnasio marcan su sesión si la hay y el resto entra como día extra.
+No se duplica nada. Cuando Strava esté conectado (API gratuita, sin suscripción), el mismo botón sincroniza.
+
+### Copia de seguridad
+**Ajustos → Les teves dades**: descarga una copia `.json` y restáurala en otro navegador o tras configurar Supabase.
+En modo demo los datos viven solo en el navegador, así que conviene hacer copias.
 
 ### Plan adaptativo (automático)
 
@@ -60,7 +70,7 @@ Repo → **Settings → Pages → Source: GitHub Actions**. Cada push a `main` p
 
 ### 2. Supabase: base de datos
 1. Crea un proyecto en [supabase.com](https://supabase.com) (región Europa).
-2. **SQL Editor** → pega y ejecuta `supabase/migrations/20261102000000_init.sql`.
+2. **SQL Editor** → pega y ejecuta `supabase/migrations/20261102000000_init.sql` y después `supabase/migrations/20261109000000_activitats_manuals.sql`.
 3. **Authentication → Users → Add user**: crea tu usuario con email y contraseña (marca *Auto confirm*).
 4. **Authentication → Providers → Email**: desactiva *Allow new users to sign up* (así nadie más puede registrarse).
 5. Hazte propietario. En el SQL Editor:

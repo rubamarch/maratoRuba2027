@@ -21,6 +21,8 @@ const round05 = x => Math.round(x * 2) / 2;
 const km1 = x => String(+(+x).toFixed(1)).replace('.', ',');
 const actDate = a => String(a.start_date_local || a.start_date || '').slice(0, 10);
 const actKm = a => (+a.distance || 0) / 1000;
+/** Activitat de córrer (Strava o manual). Pàdel, gimnàs i altres no compten com a km de cursa. */
+export const isRunAct = a => !a.sport_type || /run/i.test(a.sport_type);
 const dayName = d => `${DAYS_L[(d.getDay() + 6) % 7]} ${catDate(d)}`;
 
 /** Assigna activitats de Strava a sessions de córrer.
@@ -34,6 +36,7 @@ function matchActivities(plan, data, moves) {
   for (const a of acts) {
     if (a.session_id === 'none') { extras.push(a); continue; }
     if (a.session_id && plan.byId[a.session_id]) { (match[a.session_id] ||= []).push(a); continue; }
+    if (!isRunAct(a)) { extras.push(a); continue; }   // pàdel/gimnàs sense sessió assignada → dia extra
     pending.push(a);
   }
   const rest = [];
@@ -124,11 +127,11 @@ export function computeModel(plan, data, todayIso) {
   const sessionKm = s => {
     const l = data.logs[s.id];
     if (l && l.km != null && l.km !== '') return +l.km;
-    return (match[s.id] || []).reduce((a, x) => a + actKm(x), 0);
+    return (match[s.id] || []).filter(isRunAct).reduce((a, x) => a + actKm(x), 0);
   };
 
   // ---- Dies extra → suavitzar la qualitat propera ----
-  if (adaptOn) for (const a of extras) {
+  if (adaptOn) for (const a of extras.filter(isRunAct)) {
     const d = fromIso(actDate(a));
     const q = plan.sessions.find(s => s.type === 'q' && isActive(s, data.weeks) && !done(s.id) && sDate(s) > d && (sDate(s) - d) / DAY <= 2);
     if (q) {
@@ -161,7 +164,7 @@ export function computeModel(plan, data, todayIso) {
       if (!auto[s.id]?.lost) planned += km;
     }
     const wkExtras = extras.filter(a => { const d = fromIso(actDate(a)); return d >= plan.dateOf(w, 0) && d <= plan.dateOf(w, 6); });
-    const actual = sess.filter(s => isRun(s.type)).reduce((a, s) => a + sessionKm(s), 0) + wkExtras.reduce((a, x) => a + actKm(x), 0);
+    const actual = sess.filter(s => isRun(s.type)).reduce((a, s) => a + sessionKm(s), 0) + wkExtras.filter(isRunAct).reduce((a, x) => a + actKm(x), 0);
     const rpes = sess.filter(s => isRun(s.type) && data.logs[s.id] && data.logs[s.id].rpe).map(s => +data.logs[s.id].rpe);
     const rpe = rpes.length ? rpes.reduce((a, b) => a + b, 0) / rpes.length : null;
     const keyMissed = sess.filter(s => ['l', 'q', 't'].includes(s.type) && !done(s.id)).length;

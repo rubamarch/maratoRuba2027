@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import * as store from './store.js';
 import { buildPlan, iso, fromIso, addDays, catDate, DAY, DAYS, DAYS_L, TYPES, isRun, SLOT_ORDER, phaseOf, fdsOn, weekOfDate } from './shared/plan.js';
 import { zones, fillPaces, fitness, fmt, fmtH, parseT } from './shared/pace.js';
-import { computeModel, modelSessionsOn } from './shared/adapt.js';
+import { computeModel, modelSessionsOn, isRunAct } from './shared/adapt.js';
 
 // ---------- Estat ----------
 let data = store.cached();
@@ -11,6 +11,7 @@ let auth = { user: null, owner: false };
 let plan, model, Z;
 let viewWeek = null;
 let installEvt = null;
+let addOpen = null;   // data (iso) amb el formulari d'activitat obert
 const $ = s => document.querySelector(s);
 const view = $('#view');
 
@@ -76,6 +77,7 @@ function dateLabel(d) {
 }
 
 function stravaBlock(a, s) {
+  if (!isRunAct(a)) return `<div class="strava"><div class="strava-h"><span><b>${a.source === 'manual' ? 'Registre' : 'Strava'}</b> · ${esc(a.name || actKind(a).n)}</span><span class="muted mono">${a.moving_time ? fmtH(a.moving_time) : ''}</span></div>${canWrite() && (a.source || +a.id < 0) ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar</button></div>` : ''}</div>`;
   const k = actKm(a); const pace = a.moving_time && k ? a.moving_time / k : null;
   const hr = a.avg_hr ? `${Math.round(a.avg_hr)}${a.max_hr ? `<small class="muted">/${Math.round(a.max_hr)}</small>` : ''}` : '—';
   const opts = canWrite() ? assignSelect(a, s ? s.week : weekOfDate(plan, fromIso(actDate(a)))) : '';
@@ -92,7 +94,8 @@ function stravaBlock(a, s) {
       ${a.splits && a.splits.length ? splitsTable(a.splits) : ''}
     </details>` : ''}
     ${opts}
-    <a class="small" href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener">Obre a Strava ↗</a>
+    ${+a.id > 0 ? `<a class="small" href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener">Obre a Strava ↗</a>` : ''}
+    ${canWrite() && (a.source || +a.id < 0) ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}
   </div>`;
 }
 
@@ -166,13 +169,163 @@ function sessCard(s) {
   </article>`;
 }
 
+const actKind = a => {
+  const t = String(a.sport_type || 'Run');
+  if (/run/i.test(t)) return { n: 'Cursa', t: 'e' };
+  if (/p[aà]del|tenn|racq|squash|pickle|badminton/i.test(t)) return { n: 'Pàdel', t: 'p' };
+  if (/weight|strength|crossfit|hiit|workout|training|yoga|pilates/i.test(t) && !/^workout$/i.test(t)) return { n: 'Gimnàs', t: 'g' };
+  if (/ride|bike|cycl/i.test(t)) return { n: 'Bici', t: 'l' };
+  return { n: 'Activitat', t: 'o' };
+};
 function extraCard(a) {
-  const d = fromIso(actDate(a));
-  return `<article class="sess t-e">
-    <div class="sess-h"><div><div class="sess-meta"><span class="tchip">Dia extra</span><span>${dateLabel(d)}</span></div>
-    <div class="sess-title"><h3>Cursa fora del pla</h3><span class="mono small">${km1(actKm(a))} km</span></div></div></div>
-    <div class="sess-b"><p class="small muted">Compta als km de la setmana i el pla s'adapta si cal.</p>${stravaBlock(a, null)}</div></article>`;
+  const d = fromIso(actDate(a)); const k = actKind(a); const km = actKm(a);
+  const bits = [km ? `${km1(km)} km` : '', a.moving_time ? fmtH(a.moving_time) : '', a.rpe ? `esforç ${a.rpe}/10` : ''].filter(Boolean).join(' · ');
+  const api = +a.id > 0 && !a.source;
+  return `<article class="sess t-${k.t} extra is-done">
+    <div class="sess-h"><div><div class="sess-meta"><span class="tchip">Extra · ${k.n}</span><span>${dateLabel(d)}</span>${a.source === 'paste' || a.source === 'csv' || api ? '<span class="chip orange">Strava</span>' : ''}</div>
+    <div class="sess-title"><h3>${esc(a.name || (isRunAct(a) ? 'Cursa fora del pla' : k.n))}</h3>${bits ? `<span class="mono small">${bits}</span>` : ''}</div></div>
+    <span class="check" aria-hidden="true" style="--tc:var(--t-${k.t});background:var(--tc);border-color:var(--tc);color:#fff">${ICON_CHECK}</span></div>
+    <div class="sess-b">${a.note ? `<p class="small">«${esc(a.note)}»</p>` : ''}
+      <p class="small muted">${isRunAct(a) ? 'Compta als km de la setmana i el pla s\'adapta si cal.' : 'Queda registrada, però no suma km de cursa.'}</p>
+      ${api ? stravaBlock(a, null) : `${isRunAct(a) && canWrite() ? assignSelect(a, weekOfDate(plan, d)) : ''}${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}`}
+    </div></article>`;
 }
+
+// ---------- Afegir activitat a qualsevol dia ----------
+const ADD_TYPES = [['Run', 'Córrer'], ['Padel', 'Pàdel'], ['WeightTraining', 'Gimnàs'], ['Ride', 'Bici'], ['Workout', 'Altres']];
+function addBlock(date) {
+  if (!canWrite()) return '';
+  if (addOpen !== date) return `<button type="button" class="addbtn" data-add="${date}">+ Afegir activitat</button>`;
+  return `<form class="card addform" id="addForm" data-date="${date}">
+    <div class="row between"><span class="eyebrow">Nova activitat · ${dateLabel(fromIso(date))}</span></div>
+    <div class="formgrid">
+      <label class="f">Tipus<select name="type">${ADD_TYPES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label>
+      <label class="f wide">Nom<input name="name" maxlength="80" placeholder="Rodatge amb amics, partit…"></label>
+      <label class="f">Km<input name="km" inputmode="decimal"></label>
+      <label class="f">Minuts<input name="min" inputmode="numeric"></label>
+      <label class="f">Esforç 1–10<select name="rpe"><option value=""></option>${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => `<option>${v}</option>`).join('')}</select></label>
+      <label class="f wide">Nota<input name="note" maxlength="500" placeholder="Sensacions, espatlla…"></label>
+    </div>
+    <div class="row"><button class="btn primary sm" type="submit">Afegir</button><button class="btn sm ghost" type="button" data-addcancel="1">Cancel·lar</button></div>
+  </form>`;
+}
+
+// ---------- Importar de Strava (sense connexió: enganxar la taula o activities.csv) ----------
+const MES = { ene: 0, gen: 0, jan: 0, feb: 1, mar: 2, abr: 3, apr: 3, may: 4, mai: 4, jun: 5, jul: 6, ago: 7, aug: 7, set: 8, sep: 8, sept: 8, oct: 9, nov: 10, dic: 11, des: 11, dec: 11 };
+const two = n => String(n).padStart(2, '0');
+function hashId(str) { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return -(4294967296 * (2097151 & h2) + (h1 >>> 0)) || -1; }
+function sportCat(s) {
+  s = s.toLowerCase();
+  if (/carrera|cursa|run|c[oó]rrer|trail/.test(s)) return 'run';
+  if (/p[aàá]del|tenis|tennis|squash|pickle|r[aàá]quet|racquet|b[aàá]dminton/.test(s)) return 'padel';
+  if (/pesas|peses|weight|entrenamiento|entrenament|workout|crossfit|hiit|strength|fuerza|for[cç]a|pilates|yoga/.test(s)) return 'gym';
+  if (/bici|ride|cycl|cicl/.test(s)) return 'ride';
+  return 'other';
+}
+function parsePaste(text) {
+  const re = /^\s*(.+?)\s+(?:[a-zà-úé]{2,4}\.?,\s*)?(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(.+?)\s+((?:\d{1,2}:)?\d{1,2}:\d{2})(?:\s+([\d.,]+)\s*(km|mi))?/i;
+  let lines = text.split(/\r?\n/).map(l => l.replace(/\t/g, ' '));
+  if (!lines.some(l => re.test(l))) lines = text.replace(/\s+/g, ' ').split(/Editar\s+Eliminar(?:\s+Compartir)?|Edit\s+Delete(?:\s+Share)?|Edita\s+Elimina(?:\s+Comparteix)?/i);
+  const out = [];
+  for (const line of lines) {
+    const m = line.match(re); if (!m) continue;
+    const [, sport, dd, mo, y, name, time, dist, unit] = m;
+    if (/^(deporte|esport|sport)$/i.test(sport.trim())) continue;
+    const date = `${y}-${two(mo)}-${two(dd)}`; const secs = parseT(time);
+    let km = dist ? parseFloat(dist.replace(/\.(?=\d{3}\b)/g, '').replace(',', '.')) : null;
+    if (km != null && unit && unit.toLowerCase() === 'mi') km *= 1.609;
+    out.push({ id: hashId(`${date}|${sport.trim()}|${secs}|${name.trim()}`), date, sport: sport.trim(), name: name.trim(), km: km > 0 ? km : null, secs });
+  }
+  return out;
+}
+function parseCsvDate(s) {
+  s = String(s || '').trim().toLowerCase(); let m;
+  if ((m = s.match(/(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
+  if ((m = s.match(/(\d{1,2})\s+(?:de\s+)?([a-z]{3,4})\.?\s+(?:de\s+)?(\d{4})/)) && MES[m[2]] != null) return `${m[3]}-${two(MES[m[2]] + 1)}-${two(m[1])}`;
+  if ((m = s.match(/([a-z]{3,4})\.?\s+(\d{1,2}),?\s+(\d{4})/)) && MES[m[1]] != null) return `${m[3]}-${two(MES[m[1]] + 1)}-${two(m[2])}`;
+  return null;
+}
+function parseCsv(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  if (!rows.length) return null;
+  const h = rows[0].map(x => x.trim().toLowerCase());
+  const find = (...n) => { for (const x of n) { const i = h.indexOf(x); if (i >= 0) return i; } return -1; };
+  const iId = find('activity id', 'id de la actividad', 'id de l\'activitat'), iDate = find('activity date', 'fecha de la actividad', 'data de l\'activitat');
+  const iName = find('activity name', 'nombre de la actividad', 'nom de l\'activitat'), iType = find('activity type', 'tipo de actividad', 'tipus d\'activitat');
+  const iDist = find('distance', 'distancia', 'distància'), iEl = find('elapsed time', 'tiempo transcurrido', 'temps transcorregut');
+  const iMov = Math.max(h.lastIndexOf('moving time'), h.lastIndexOf('tiempo en movimiento'), h.lastIndexOf('temps en moviment'));
+  if (iDate < 0 || iType < 0) return null;
+  return rows.slice(1).filter(r => r.length > iType).map(r => {
+    const date = parseCsvDate(r[iDate]); if (!date) return null;
+    let km = iDist >= 0 ? parseFloat(String(r[iDist]).replace(',', '.')) : NaN; if (km > 300) km /= 1000;
+    const secs = Math.round(+(iMov >= 0 && r[iMov] ? r[iMov] : r[iEl] || 0)) || null;
+    const id = iId >= 0 && /^\d+$/.test(String(r[iId]).trim()) ? +String(r[iId]).trim() : hashId(`${date}|${r[iType]}|${secs}`);
+    return { id, date, sport: r[iType].trim(), name: iName >= 0 ? r[iName].trim() : r[iType].trim(), km: km > 0 ? km : null, secs };
+  }).filter(Boolean);
+}
+async function importStrava(list, source) {
+  const have = new Set(data.activities.map(a => String(a.id)));
+  const inPlan = list.filter(a => a.date >= iso(addDays(plan.start, -14)) && a.date <= iso(plan.race));
+  const rows = [];
+  for (const a of inPlan) {
+    if (have.has(String(a.id)) || rows.some(r => r.id === a.id)) continue;
+    const cat = sportCat(a.sport);
+    const sport_type = cat === 'run' ? (/trail|montaña|muntanya/i.test(a.sport) ? 'TrailRun' : 'Run') : cat === 'padel' ? 'Padel' : cat === 'gym' ? 'WeightTraining' : cat === 'ride' ? 'Ride' : 'Workout';
+    let session_id = null;
+    if (cat !== 'run') {
+      const want = cat === 'padel' ? 'p' : cat === 'gym' ? 'g' : null;
+      const s = want && modelSessionsOn(plan, model, fromIso(a.date)).find(x => x.type === want && !model.done(x.id) && !rows.some(r => r.session_id === x.id));
+      session_id = s ? s.id : 'none';
+    }
+    rows.push({ id: a.id, name: a.name || a.sport, sport_type, start_date: new Date(a.date + 'T12:00:00').toISOString(), start_date_local: `${a.date}T12:00:00Z`,
+      distance: a.km ? Math.round(a.km * 1000) : 0, moving_time: a.secs, elapsed_time: a.secs, session_id, ignored: false, source });
+  }
+  await store.addActivities(data, rows);
+  return { added: rows.length, dup: inPlan.length - rows.length, outside: list.length - inPlan.length };
+}
+function stravaDialog() {
+  let dlg = document.getElementById('stDlg');
+  if (!dlg) {
+    dlg = document.createElement('dialog'); dlg.id = 'stDlg'; dlg.className = 'dlg';
+    dlg.innerHTML = `<form method="dialog" class="dlg-in" id="stForm">
+      <div class="row between"><h2>Importar de Strava</h2><button class="iconbtn close" value="cancel" aria-label="Tancar">×</button></div>
+      <ol class="steps">
+        <li>Obre <a href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">strava.com/athlete/training</a> (Les meves activitats).</li>
+        <li>Selecciona la taula d'activitats, de la primera fila a l'última, i copia-la.</li>
+        <li>Enganxa-la aquí i prem <b>Importar</b>. Cada cursa, partit o sessió de gimnàs marca la sessió d'aquell dia; la resta entra com a dia extra.</li>
+      </ol>
+      <textarea id="stPaste" rows="6" placeholder="Carrera  lun, 9/11/2026  Morning Run  32:10  6,02 km  12 m"></textarea>
+      <div class="row"><button type="button" class="btn accent" id="stPasteGo">Importar</button>
+        <label class="btn sm ghost filebtn">Pujar activities.csv<input type="file" id="stCsv" accept=".csv,text/csv" hidden></label></div>
+      <p class="small muted" id="stMsg">L'activities.csv ve a l'exportació gratuïta de Strava (Configuració → El meu compte → Descarrega les teves dades). Les activitats ja importades no es dupliquen.</p>
+      <p class="small muted">Vols que arribin soles? Connecta Strava a Ajustos: l'API de Strava és gratuïta, no cal subscripció.</p>
+    </form>`;
+    document.body.appendChild(dlg);
+    const msg = t => { dlg.querySelector('#stMsg').textContent = t; };
+    const run = async (list, source) => {
+      if (!list || !list.length) { msg('No hi he trobat activitats. Copia la taula de "Les meves activitats" o puja l\'activities.csv.'); return; }
+      try {
+        setSync('busy', 'Desant…');
+        const r = await importStrava(list, source); recompute(); render(); setSync('ok', 'Sincronitzat');
+        msg(`${r.added} activitats importades${r.dup ? ` · ${r.dup} ja hi eren` : ''}${r.outside ? ` · ${r.outside} fora del pla` : ''}.`);
+        toast(`Strava: ${r.added} activitats importades`);
+      } catch (e) { console.error(e); setSync('err', 'Error'); msg('No s\'ha pogut desar: ' + (e.message || e)); }
+    };
+    dlg.querySelector('#stPasteGo').onclick = () => run(parsePaste(dlg.querySelector('#stPaste').value), 'paste');
+    dlg.querySelector('#stCsv').onchange = async e => { const f = e.target.files[0]; if (!f) return; const l = parseCsv(await f.text()); if (!l) return msg('Aquest CSV no sembla l\'activities.csv de Strava.'); run(l, 'csv'); e.target.value = ''; };
+  }
+  dlg.querySelector('#stPaste').value = '';
+  dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
+}
+const stravaBtn = () => canWrite() ? `<button type="button" class="btn strava-btn" id="stImport"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10 3 4 15h3.6L10 10.2 12.4 15H16zm6 12-1.8 3.6L12.4 15H9.8l4.4 8.6 4.4-8.6z"/></svg>${data.strava?.connected ? 'Sincronitzar Strava' : 'Importar de Strava'}</button>` : '';
 
 // ---------- Vista: Avui ----------
 function trackSvg() {
@@ -228,6 +381,7 @@ function renderAvui() {
     <div class="row between"><h2>Avui</h2><span class="muted small">${DAYS_L[(t.getDay() + 6) % 7]} ${catDate(t)}</span></div>
     ${todayS.length ? todayS.map(sessCard).join('') : `<div class="rest"><b>Descans</b><span>${next ? `Següent: ${next.ss.map(s => esc(model.title(s))).join(' + ')} · ${dateLabel(next.d)}` : 'Gaudeix-ne.'}</span></div>`}
     ${extrasToday.map(extraCard).join('')}
+    <div class="row">${stravaBtn()}${addBlock(todayIso())}</div>
     ${todayS.length && tomorrow.length ? `<div class="card tight"><span class="eyebrow">Demà</span>${tomorrow.map(s => `<div class="row"><span class="dot t-${s.type}"></span><b>${esc(model.title(s))}</b><span class="muted small">${TYPES[s.type].n}${isRun(s.type) && model.km(s) ? ' · ' + km1(model.km(s)) + ' km' : ''}</span></div>`).join('')}</div>` : ''}
     ${fdsBox(W)}
     ${statsHtml()}
@@ -257,7 +411,8 @@ function renderSetmana() {
     const isT = iso(d) === todayIso();
     days += `<div class="dayhead ${isT ? 'today' : ''}"><b>${DAYS_L[i]}</b><span class="muted small mono">${dm(d)}${isT ? ' · avui' : ''}</span></div>`;
     const all = [...ss, ...lostHere.filter(x => !ss.includes(x))];
-    days += all.length || ex.length ? all.map(sessCard).join('') + ex.map(extraCard).join('') : `<div class="rest"><span>Descans</span></div>`;
+    days += all.length || ex.length ? all.map(sessCard).join('') + ex.map(extraCard).join('') : (addOpen === iso(d) ? '' : `<div class="rest"><span>Descans</span></div>`);
+    days += addBlock(iso(d));
   }
   const hist = model.history.filter(h => h.week === W.n);
   const pct = info.planned ? Math.min(100, info.actual / info.planned * 100) : 0;
@@ -273,6 +428,7 @@ function renderSetmana() {
     ${W.note ? `<div class="note">${esc(W.note)}</div>` : ''}
     ${hist.length ? `<div class="card tight"><span class="eyebrow">Ajustos automàtics</span><div class="hist">${hist.map(histRow).join('')}</div></div>` : ''}
     ${fdsBox(W)}
+    <div class="row">${stravaBtn()}</div>
     ${days}
     <p class="small muted">Si et saltes una tirada llarga o una sessió de qualitat, el pla la recol·loca sola dins la setmana. Els rodatges suaus no es recuperen.</p>`;
 }
@@ -344,7 +500,7 @@ function renderProgres() {
       <div class="row small muted"><span><span class="dot" style="--tc:var(--primary);border-radius:2px"></span> Fets</span><span style="color:var(--accent)">- - Pla adaptat</span><span>··· Pla original</span></div></div>
     <div class="card"><span class="eyebrow">Historial d'ajustos ${model.adaptOn ? '' : '(adaptació desactivada)'}</span>
       <div class="hist">${model.history.length ? [...model.history].sort((a, b) => b.week - a.week).map(histRow).join('') : '<p class="muted small">Encara cap ajust: el pla s\'adapta quan acaba cada setmana i quan et saltes o afegeixes sessions.</p>'}</div></div>
-    <div class="card"><div class="row between"><span class="eyebrow">Curses de Strava</span>${data.strava?.last_sync ? `<span class="muted small">Sincronitzat ${new Date(data.strava.last_sync).toLocaleString('ca-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>` : ''}</div>
+    <div class="card"><div class="row between"><span class="eyebrow">Activitats de Strava</span>${stravaBtn()}</div><div class="row between">${data.strava?.last_sync ? `<span class="muted small">Sincronitzat ${new Date(data.strava.last_sync).toLocaleString('ca-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>` : ''}</div>
       <div class="list">${acts.length ? acts.map(a => `<div class="li"><span><b class="mono">${km1(actKm(a))} km</b> · ${esc(a.name || '')}<br><span class="muted small">${dShort(fromIso(actDate(a)))} · ${a.moving_time ? fmt(a.moving_time / actKm(a)) + '/km' : ''}${a.avg_hr ? ' · ' + Math.round(a.avg_hr) + ' ppm' : ''} → ${esc(where(a))}</span></span>${canWrite() ? `<a class="btn sm ghost" href="#setmana/${weekOfDate(plan, fromIso(actDate(a)))}">Veure</a>` : '<span></span>'}</div>`).join('') : `<p class="muted small">${data.strava?.connected ? 'Encara no hi ha curses importades.' : 'Strava no està connectat (Ajustos).'}</p>`}</div></div>`;
 }
 
@@ -422,7 +578,13 @@ async function renderAjustos() {
         <p class="small muted">Les curses noves arriben soles (webhook). Si en falta alguna, sincronitza.</p>
         ${canWrite() ? `<div class="row"><button class="btn sm" id="stSync">Sincronitzar ara</button><button class="btn sm ghost" id="stOff">Desconnectar</button></div>` : ''}`
         : `<p class="small muted">Connecta Strava i cada cursa es marcarà sola amb km, temps, ritme, FC, mapa i parcials.</p>
-        ${canWrite() ? `<button class="btn accent" id="stOn" ${store.demo || !CONFIG.STRAVA_CLIENT_ID ? 'disabled' : ''}>Connectar amb Strava</button>` : ''}`}
+        ${canWrite() ? `<div class="row"><button class="btn accent" id="stOn" ${store.demo || !CONFIG.STRAVA_CLIENT_ID ? 'disabled' : ''}>Connectar amb Strava</button>${stravaBtn()}</div>
+        <p class="small muted">${store.demo || !CONFIG.STRAVA_CLIENT_ID ? 'La connexió automàtica (gratuïta, sense subscripció) s\'activa quan configures Supabase i l\'app de Strava (vegeu el README). Mentrestant, "Importar de Strava" et deixa enganxar la taula d\'activitats o pujar l\'activities.csv.' : ''}</p>` : ''}`}
+    </div>
+    <div class="card"><span class="eyebrow">Les teves dades</span>
+      <p class="small">${store.demo ? '<b>Mode demo:</b> les dades només es desen en aquest navegador. Si esborres les dades del navegador o canvies de mòbil, es perden. Fes còpies sovint o configura Supabase perquè es desin al núvol.' : 'Les dades es desen a la teva base de dades de Supabase i es veuen des de qualsevol dispositiu.'}</p>
+      <p class="small muted mono">${Object.keys(data.logs).length} registres · ${data.activities.length} activitats · ${data.tests.length} tests · ${Object.keys(data.moves).length} moviments</p>
+      ${canWrite() ? `<div class="row"><button class="btn sm" id="bkDown">Descarregar còpia de seguretat</button><label class="btn sm ghost filebtn">Restaurar una còpia<input type="file" id="bkIn" accept=".json,application/json" hidden></label></div>` : '<div class="row"><button class="btn sm" id="bkDown">Descarregar còpia de seguretat</button></div>'}
     </div>
     <div class="card"><span class="eyebrow">Notificacions</span>
       <p class="small muted">Avís a les 21:00 amb la sessió de demà i a les 8:00 amb la d'avui.</p>
@@ -500,6 +662,9 @@ view.addEventListener('click', async e => {
     if (!row.done && row.km == null && row.min == null && row.rpe == null && !row.note) return act(() => store.saveLog(data, id, null), 'Desmarcada');
     return act(() => store.saveLog(data, id, row), row.done ? 'Feta ✓' : 'Desmarcada');
   }
+  if (ds.add) { addOpen = addOpen === ds.add ? null : ds.add; render(); document.querySelector('#addForm [name=name]')?.focus(); return; }
+  if (ds.addcancel) { addOpen = null; render(); return; }
+  if (ds.delact) { if (confirm('Esborrar aquesta activitat?')) return act(() => store.deleteActivity(data, ds.delact), 'Activitat esborrada'); return; }
   if (ds.clear) return act(() => store.saveLog(data, ds.clear, null), 'Registre esborrat');
   if (ds.mv !== undefined && ds.date !== undefined) {
     const s = plan.byId[ds.mv]; const date = ds.date;
@@ -518,6 +683,19 @@ view.addEventListener('click', async e => {
   if (ds.deltest) { if (confirm('Esborrar aquest test?')) return act(() => store.deleteTest(data, ds.deltest), 'Test esborrat'); return; }
   if (ds.copy) { const i = document.getElementById(ds.copy); try { await navigator.clipboard.writeText(i.value); toast('Copiat'); } catch { i.select(); } return; }
   switch (t.id) {
+    case 'stImport':
+      if (data.strava?.connected) {
+        t.disabled = true;
+        try { const r = await store.invoke('strava-connect', { action: 'sync' }); toast(`${r.saved} curses actualitzades`); await refresh(); } catch (err) { toast('Error: ' + err.message); t.disabled = false; }
+        return;
+      }
+      stravaDialog(); return;
+    case 'bkDown': {
+      const blob = new Blob([store.exportAll(data)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `marato27-copia-${todayIso()}.json`;
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      toast('Còpia descarregada'); return;
+    }
     case 'logout': await store.signOut(); auth = await store.session(); recompute(); render(); return;
     case 'install': installEvt.prompt(); installEvt = null; return;
     case 'stOn': {
@@ -557,6 +735,15 @@ view.addEventListener('submit', async e => {
     const row = { done: cur.done || !!(num(fd.get('km')) || num(fd.get('min'))), km: num(fd.get('km')), min: num(fd.get('min')), rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null };
     return act(() => store.saveLog(data, id, row), 'Desat ✓');
   }
+  if (f.id === 'addForm') {
+    const date = f.dataset.date; const type = fd.get('type'); const km = num(fd.get('km')); const min = num(fd.get('min'));
+    const name = String(fd.get('name') || '').trim().slice(0, 80) || (ADD_TYPES.find(x => x[0] === type) || [, 'Activitat'])[1];
+    const a = { id: -Date.now(), name, sport_type: type, start_date: new Date(date + 'T12:00:00').toISOString(), start_date_local: `${date}T12:00:00Z`,
+      distance: km ? Math.round(km * 1000) : 0, moving_time: min ? Math.round(min * 60) : null, elapsed_time: min ? Math.round(min * 60) : null,
+      session_id: 'none', ignored: false, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null, source: 'manual' };
+    addOpen = null;
+    return act(() => store.addActivities(data, [a]), 'Activitat afegida ✓');
+  }
   if (f.id === 'testForm') {
     const secs = parseT(fd.get('time')); if (!secs) return toast('Escriu el temps com mm:ss o h:mm:ss');
     return act(() => store.addTest(data, { date: fd.get('date'), dist: +fd.get('dist'), secs, label: String(fd.get('label') || '').slice(0, 80) || null }), 'Test desat ✓ · ritmes recalculats');
@@ -580,6 +767,16 @@ view.addEventListener('change', e => {
     viewWeek = null;
     return act(() => store.saveSettings(data, { race_date: t.value }), 'Data actualitzada');
   }
+  if (t.id === 'bkIn' && t.files[0]) {
+    const file = t.files[0]; t.value = '';
+    file.text().then(txt => {
+      let j; try { j = JSON.parse(txt); } catch { return toast('Aquest fitxer no és una còpia del pla'); }
+      if (j.app !== 'marato27') return toast('Aquest fitxer no és una còpia del pla');
+      if (!confirm(`Restaurar la còpia del ${String(j.exported || '').slice(0, 10)}? S'afegeixen les dades i se substitueixen les que coincideixin.`)) return;
+      act(async () => { await store.importAll(data, j); if (!store.demo) data = await store.loadAll(); }, 'Còpia restaurada ✓');
+    });
+    return;
+  }
   if (t.id === 'adapt') return act(() => store.saveSettings(data, { adapt: t.checked }), t.checked ? 'Adaptació activada' : 'Adaptació desactivada');
 });
 
@@ -601,7 +798,7 @@ function render() {
   document.querySelectorAll('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tab ? 'page' : 'false'));
   $('#brandSub').textContent = `S${model.curWeek}/25 · ${Math.max(0, Math.round((plan.race - today0()) / DAY))} dies`;
   const bn = $('#banner');
-  if (store.demo && tab !== 'ajustos') { bn.hidden = false; bn.innerHTML = 'Mode demo · les dades només es desen en aquest navegador. <a href="#ajustos">Més info</a>'; }
+  if (store.demo && tab !== 'ajustos') { bn.hidden = false; bn.innerHTML = 'Mode demo · les dades només es desen en aquest navegador. <a href="#ajustos">Fes una còpia o activa el núvol</a>'; }
   else if (!auth.owner) { bn.hidden = false; bn.innerHTML = auth.user ? 'Sessió sense permís d\'edició.' : 'Només lectura · <a href="#ajustos">inicia sessió</a> per editar.'; }
   else bn.hidden = true;
   if (tab !== lastTab) { window.scrollTo(0, 0); lastTab = tab; }

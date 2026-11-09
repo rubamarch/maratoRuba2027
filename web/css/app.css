@@ -3,9 +3,9 @@
   --bg: #f4f3ee; --surface: #ffffff; --surface-2: #ecebe4; --ink: #15201b; --muted: #5f6b64; --line: #dcdbd2;
   --brand: #0f3d2a; --brand-ink: #f4f3ee; --primary: #1d7a4c; --primary-soft: #dcefe3;
   --accent: #e8611a; --accent-soft: #fde6d8; --warn: #a86b00; --warn-soft: #f8ecd2; --bad: #b3361f;
-  --t-q: #d0482a; --t-e: #1d7a4c; --t-l: #2563a8; --t-g: #7149a8; --t-p: #c48a00; --t-t: #c2185b; --t-r: #e8611a;
-  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-disp: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --t-q: #d0482a; --t-e: #1d7a4c; --t-l: #2563a8; --t-g: #7149a8; --t-p: #c48a00; --t-t: #c2185b; --t-r: #e8611a; --t-o: #5f6b64;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-disp: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --r: 16px; --r-sm: 10px;
   --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 4px 14px rgb(0 0 0 / .05);
@@ -17,7 +17,7 @@
     --bg: #0e1411; --surface: #161e1a; --surface-2: #1d2722; --ink: #e7ece8; --muted: #9aa8a0; --line: #2a3530;
     --brand: #0b2a1e; --brand-ink: #e7ece8; --primary: #4cc185; --primary-soft: #183326;
     --accent: #ff8a4c; --accent-soft: #3a2316; --warn: #e2b04a; --warn-soft: #33290f; --bad: #ff7a5f;
-    --t-q: #ff7a5f; --t-e: #4cc185; --t-l: #6aa8ec; --t-g: #b494e6; --t-p: #e2b04a; --t-t: #f06292; --t-r: #ff8a4c;
+    --t-q: #ff7a5f; --t-e: #4cc185; --t-l: #6aa8ec; --t-g: #b494e6; --t-p: #e2b04a; --t-t: #f06292; --t-r: #ff8a4c; --t-o: #9aa8a0;
     --shadow: none;
     color-scheme: dark;
   }
@@ -228,3 +228,76 @@ ul.tight { margin: 0; padding-left: 18px; display: flex; flex-direction: column;
 .copy { display: flex; gap: 8px; }
 .copy input { font: 13px var(--f-mono); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ================= v2 · aspecte modernitzat (2026-11-09) ================= */
+:root { --bg: #f2f4f0; --line: #e2e6de; --r: 20px; --r-sm: 14px; --tabbar-h: 66px;
+  --shadow: 0 1px 2px rgb(16 28 22 / .05), 0 8px 24px rgb(16 28 22 / .06); }
+@media (prefers-color-scheme: dark) { :root { --bg: #0c110f; --line: #24302a; --shadow: 0 1px 2px rgb(0 0 0 / .35), 0 8px 24px rgb(0 0 0 / .25); } }
+body { font-size: 16px; -webkit-font-smoothing: antialiased; padding-bottom: calc(var(--tabbar-h) + 28px + env(safe-area-inset-bottom)); }
+h1, h2, h3 { letter-spacing: -.02em; }
+h1 { font-size: clamp(28px, 7vw, 40px); font-weight: 800; text-transform: none; }
+h2 { font-size: 22px; font-weight: 800; text-transform: none; }
+h3 { font-size: 18px; font-weight: 700; }
+.eyebrow { font-family: var(--f-body); font-weight: 700; font-size: 11.5px; letter-spacing: .08em; }
+
+.appbar { background: color-mix(in srgb, var(--brand) 90%, transparent); backdrop-filter: saturate(1.5) blur(16px); -webkit-backdrop-filter: saturate(1.5) blur(16px); }
+.brand-mark { border-radius: 12px; font: 800 17px/1 var(--f-disp); }
+.brand-txt b { font: 800 17px/1.15 var(--f-disp); text-transform: none; letter-spacing: -.01em; }
+
+.card, .stat, .wk { border-color: transparent; box-shadow: var(--shadow); }
+.sess { border-color: transparent; border-radius: 18px; }
+.sess::before { width: 4px; border-radius: 0 4px 4px 0; top: 12px; bottom: 12px; }
+.sess.today { border-color: transparent; box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+.sess-title h3 { font-size: 18px; }
+.tchip { border: 0; background: color-mix(in srgb, var(--tc) 13%, transparent); padding: 5px 8px; border-radius: 999px; font: 700 11px/1 var(--f-body); letter-spacing: .05em; }
+.check { width: 44px; height: 44px; border-color: color-mix(in srgb, var(--tc, var(--primary)) 45%, var(--line)); }
+.sess .check[aria-pressed="true"] { background: var(--tc); border-color: var(--tc); }
+.sess.is-done .sess-title h3 { color: var(--muted); }
+.stat { border-radius: var(--r-sm); padding: 14px; }
+.stat .v { font: 800 28px/1 var(--f-disp); letter-spacing: -.02em; }
+.stat .v small { font-size: 15px; }
+.btn { border-radius: 14px; font-family: var(--f-body); }
+.btn.sm { border-radius: 11px; }
+.btn.ghost.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.chip { font-family: var(--f-body); font-weight: 700; }
+.seg { border-radius: 14px; padding: 3px; gap: 3px; border: 0; background: var(--surface-2); }
+.seg button { border: 0 !important; border-radius: 11px; min-height: 38px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--primary); box-shadow: var(--shadow); }
+input, select, textarea { border-radius: 12px; }
+textarea { font: 13.5px/1.45 var(--f-mono); resize: vertical; }
+
+.hero { background: radial-gradient(120% 140% at 100% 0%, #1f6b47 0%, transparent 55%), linear-gradient(160deg, #0f3d2a, #0b2a1e); border-radius: 24px; padding: 20px; }
+.countdown b { font: 800 60px/.85 var(--f-disp); letter-spacing: -.03em; }
+
+.rest { border-radius: 18px; border-style: dashed; background: transparent; }
+.dayhead b { font: 800 17px var(--f-disp); text-transform: capitalize; letter-spacing: -.01em; }
+.dayhead.today b { color: var(--accent); }
+
+/* Afegir activitat */
+.addbtn { align-self: flex-start; font: 600 14px var(--f-body); color: var(--primary); background: transparent; border: 1.5px dashed color-mix(in srgb, var(--primary) 45%, var(--line)); border-radius: 12px; padding: 8px 12px; cursor: pointer; min-height: 38px; }
+.addbtn:hover { background: var(--primary-soft); }
+.addform { box-shadow: 0 0 0 2px var(--primary-soft), var(--shadow); }
+.sess.extra { --tc: var(--t-e); }
+.sess.t-o { --tc: var(--t-o); }
+
+/* Strava */
+.strava-btn { background: #fc4c02; border-color: #fc4c02; color: #fff; }
+.strava-btn:hover { filter: brightness(1.06); border-color: #fc4c02; }
+.filebtn { cursor: pointer; }
+.dlg { border: 0; padding: 0; border-radius: 22px; background: var(--surface); color: var(--ink); width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); box-shadow: 0 24px 60px rgb(0 0 0 / .3); }
+.dlg::backdrop { background: rgb(8 14 11 / .55); backdrop-filter: blur(3px); }
+.dlg-in { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.dlg .close { font-size: 26px; color: var(--muted); background: transparent; border: 0; cursor: pointer; }
+ol.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+
+/* Barra de pestanyes flotant (mòbil) */
+@media (max-width: 899px) {
+  .tabbar { left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); height: var(--tabbar-h);
+    padding-bottom: 0; border: 0; border-radius: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / .14);
+    background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: saturate(1.5) blur(16px); -webkit-backdrop-filter: saturate(1.5) blur(16px); }
+  .tabbar a[aria-current="page"] svg { background: var(--primary-soft); border-radius: 10px; padding: 2px 10px; width: 44px; box-sizing: content-box; height: 22px; }
+  .toast { bottom: calc(var(--tabbar-h) + 28px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 900px) {
+  .tabbar { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+}
