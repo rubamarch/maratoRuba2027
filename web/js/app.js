@@ -335,12 +335,12 @@ function trackSvg() {
   s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="rgb(255 255 255 / .18)" stroke-width="6" stroke-linecap="round"/>`;
   for (let w = 1; w <= 25; w++) {
     const ss = plan.sessions.filter(x => x.week === w && model.active(x)); const f = ss.length ? ss.filter(x => model.done(x.id)).length / ss.length : 0;
-    if (f > 0) s += `<line x1="${X(w)}" y1="${y}" x2="${X(w) + (X(w + 1) - X(w)) * f}" y2="${y}" stroke="#4cc185" stroke-width="6"/>`;
+    if (f > 0) s += `<line x1="${X(w)}" y1="${y}" x2="${X(w) + (X(w + 1) - X(w)) * f}" y2="${y}" stroke="#34e29b" stroke-width="6"/>`;
   }
-  plan.phases.forEach((p, i) => { const xx = X(p.w[0]); s += `<circle cx="${xx}" cy="${y}" r="4.5" fill="#0f3d2a" stroke="#f4f3ee" stroke-width="2"/><text x="${xx}" y="${y + 22}" font-size="9.5" fill="rgb(244 243 238 / .75)" text-anchor="${i === 0 ? 'start' : 'middle'}">${p.n.split(' ')[0].toUpperCase()}</text>`; });
-  s += `<rect x="${x1 - 6}" y="${y - 6}" width="12" height="12" fill="#e8611a" transform="rotate(45 ${x1} ${y})"/>`;
+  plan.phases.forEach((p, i) => { const xx = X(p.w[0]); s += `<circle cx="${xx}" cy="${y}" r="4.5" fill="#0d0f14" stroke="#fff" stroke-width="2"/><text x="${xx}" y="${y + 22}" font-size="9.5" fill="rgb(255 255 255 / .7)" text-anchor="${i === 0 ? 'start' : 'middle'}">${p.n.split(' ')[0].toUpperCase()}</text>`; });
+  s += `<rect x="${x1 - 6}" y="${y - 6}" width="12" height="12" fill="#ff5a4a" transform="rotate(45 ${x1} ${y})"/>`;
   const tx = x0 + (x1 - x0) * frac / 25;
-  s += `<line x1="${tx}" y1="${y - 14}" x2="${tx}" y2="${y + 4}" stroke="#e8611a" stroke-width="2.5"/><circle cx="${tx}" cy="${y - 14}" r="4" fill="#e8611a"/>`;
+  s += `<line x1="${tx}" y1="${y - 14}" x2="${tx}" y2="${y + 4}" stroke="#ff5a4a" stroke-width="2.5"/><circle cx="${tx}" cy="${y - 14}" r="4" fill="#ff5a4a"/>`;
   return s + '</svg>';
 }
 
@@ -652,7 +652,7 @@ async function drawMap(id) {
     const pts = decodePolyline(a.polyline);
     const m = L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(m);
-    const line = L.polyline(pts, { color: '#e8611a', weight: 4 }).addTo(m);
+    const line = L.polyline(pts, { color: '#ff5a4a', weight: 4 }).addTo(m);
     m.fitBounds(line.getBounds(), { padding: [12, 12] });
   } catch { el.textContent = 'No s\'ha pogut carregar el mapa.'; }
 }
