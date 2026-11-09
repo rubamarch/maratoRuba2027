@@ -88,12 +88,12 @@ function dateLabel(d) {
 }
 
 function actBlock(a, s) {
-  if (!isRunAct(a)) return `<div class="strava"><div class="strava-h"><span><b>Registre</b> · ${esc(a.name || actKind(a).n)}</span><span class="muted mono">${a.moving_time ? fmtH(a.moving_time) : ''}</span></div>${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar</button></div>` : ''}</div>`;
+  if (!isRunAct(a)) return `<div class="actbox"><div class="actbox-h"><span><b>Registre</b> · ${esc(a.name || actKind(a).n)}</span><span class="muted mono">${a.moving_time ? fmtH(a.moving_time) : ''}</span></div>${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar</button></div>` : ''}</div>`;
   const k = actKm(a); const pace = a.moving_time && k ? a.moving_time / k : null;
   const hr = a.avg_hr ? `${Math.round(a.avg_hr)}${a.max_hr ? `<small class="muted">/${Math.round(a.max_hr)}</small>` : ''}` : '—';
   const opts = canWrite() ? assignSelect(a, s ? s.week : weekOfDate(plan, fromIso(actDate(a)))) : '';
-  return `<div class="strava" data-act="${a.id}">
-    <div class="strava-h"><span><b>Activitat</b> · ${esc(a.name || 'Cursa')}</span><span class="muted mono">${dShort(fromIso(actDate(a)))} ${String(a.start_date_local || '').slice(11, 16)}</span></div>
+  return `<div class="actbox" data-act="${a.id}">
+    <div class="actbox-h"><span><b>Activitat</b> · ${esc(a.name || 'Cursa')}</span><span class="muted mono">${dShort(fromIso(actDate(a)))} ${String(a.start_date_local || '').slice(11, 16)}</span></div>
     <div class="metrics">
       <div><b>${km1(k)}</b><span>km</span></div>
       <div><b>${a.moving_time ? fmtH(a.moving_time) : '—'}</b><span>temps</span></div>
