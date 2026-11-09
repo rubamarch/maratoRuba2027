@@ -1,5 +1,5 @@
 // Service worker: app instal·lable, funciona sense cobertura i rep notificacions push.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `marato27-shell-${VERSION}`;
 const RUNTIME = 'marato27-runtime';
 const FILES = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/config.js',
@@ -13,8 +13,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Dades de Supabase i Strava: sempre xarxa (l'app ja guarda una còpia local).
-  if (url.hostname.endsWith('supabase.co') || url.hostname.includes('strava.com')) return;
+  // Dades de Supabase: sempre xarxa (l'app ja guarda una còpia local).
+  if (url.hostname.endsWith('supabase.co')) return;
   if (url.origin === location.origin) {
     // Xarxa primer per tenir sempre la darrera versió; si no hi ha connexió, la còpia.
     e.respondWith(fetch(req).then(r => { const c = r.clone(); caches.open(SHELL).then(ca => ca.put(req, c)); return r; })

@@ -304,3 +304,21 @@ ul.tight li::marker { color: var(--accent); }
 ol.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Registre manual: menús separats i temps en dues caselles ---------- */
+.menus { display: flex; flex-direction: column; gap: 8px; }
+.more.menu { background: var(--surface-2); border-radius: 14px; padding: 4px 14px; }
+.more.menu > summary { color: var(--ink); width: 100%; justify-content: space-between; min-height: 42px; }
+.more.menu > summary::after { color: var(--muted); }
+.more.menu[open] { padding-bottom: 14px; }
+.more.menu[open] > summary { margin-bottom: 4px; }
+.more.menu input, .more.menu select { background: var(--surface); }
+.timef { grid-column: span 2; }
+.timef > span { font: 700 12.5px var(--f-body); color: var(--muted); }
+.timebox { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.timebox label { position: relative; display: block; }
+.timebox input { padding-right: 44px; font-family: var(--f-mono); font-size: 16px; }
+.timebox span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font: 700 12px var(--f-body); color: var(--muted); pointer-events: none; }
+input[name="km"] { font-family: var(--f-mono); font-size: 16px; }
+.more.menu .daybtns button, .more.menu .btn:not(.primary) { background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .06); }
+.more.menu .daybtns button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }

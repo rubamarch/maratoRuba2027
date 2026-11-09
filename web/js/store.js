@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 
 const CACHE = 'marato27-cache-v1';
 const DEMO = 'marato27-demo-v1';
-const empty = () => ({ settings: { race_date: '2027-04-25', goal_pace: 300, adapt: true }, logs: {}, moves: {}, weeks: {}, tests: [], activities: [], strava: { connected: false } });
+const empty = () => ({ settings: { race_date: '2027-04-25', goal_pace: 300, adapt: true }, logs: {}, moves: {}, weeks: {}, tests: [], activities: [] });
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sense espai o bloquejat */ } };
 
@@ -57,9 +57,9 @@ export const cached = () => lsGet(demo ? DEMO : CACHE) || empty();
 export async function loadAll() {
   if (demo) return lsGet(DEMO) || empty();
   const q = t => sb.from(t).select('*');
-  const [settings, logs, moves, weeks, tests, acts, strava] = await Promise.all([
+  const [settings, logs, moves, weeks, tests, acts] = await Promise.all([
     sb.from('settings').select('*').eq('id', 1).maybeSingle(), q('logs'), q('moves'), q('weeks'), q('tests'),
-    sb.from('activities').select('*').order('start_date_local'), sb.rpc('strava_status')
+    sb.from('activities').select('*').order('start_date_local')
   ]);
   for (const r of [settings, logs, moves, weeks, tests, acts]) if (r.error) throw r.error;
   const data = {
@@ -68,8 +68,7 @@ export async function loadAll() {
     moves: Object.fromEntries(moves.data.map(r => [r.session_id, r.date])),
     weeks: Object.fromEntries(weeks.data.map(r => [r.week, r])),
     tests: tests.data,
-    activities: acts.data,
-    strava: strava.data || { connected: false }
+    activities: acts.data
   };
   lsSet(CACHE, data);
   return data;
@@ -116,7 +115,7 @@ export async function setActivity(d, id, patch) {
   if (demo) return persistDemo(d);
   chk(await sb.from('activities').update(patch).eq('id', id));
 }
-// ---- Activitats manuals i importades (pàdel, gimnàs, curses fora del pla, Strava sense connexió) ----
+// ---- Activitats manuals i importades (curses, pàdel, gimnàs i altres) ----
 const ACT_COLS = ['id', 'name', 'sport_type', 'start_date', 'start_date_local', 'distance', 'moving_time', 'elapsed_time', 'avg_hr', 'max_hr', 'elevation', 'polyline', 'splits', 'session_id', 'ignored', 'rpe', 'note', 'source'];
 const actRow = a => Object.fromEntries(ACT_COLS.filter(k => a[k] !== undefined).map(k => [k, a[k]]));
 export async function addActivities(d, list) {
@@ -136,7 +135,7 @@ export async function deleteActivity(d, id) {
 
 // ---- Còpia de seguretat ----
 export function exportAll(d) {
-  return JSON.stringify({ app: 'marato27', version: 1, exported: new Date().toISOString(), ...d, strava: undefined }, null, 1);
+  return JSON.stringify({ app: 'marato27', version: 1, exported: new Date().toISOString(), ...d }, null, 1);
 }
 export async function importAll(d, j) {
   if (!j || j.app !== 'marato27') throw new Error('Aquest fitxer no és una còpia del pla.');

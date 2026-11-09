@@ -1,12 +1,6 @@
 # Configuració mínima del projecte Supabase (CLI).
 project_id = "maratoRuba2027"
 
-[functions.strava-connect]
-verify_jwt = true
-
-[functions.strava-webhook]
-verify_jwt = false
-
 [functions.calendar]
 verify_jwt = false
 

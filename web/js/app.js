@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import * as store from './store.js';
 import { buildPlan, iso, fromIso, addDays, catDate, DAY, DAYS, DAYS_L, TYPES, isRun, SLOT_ORDER, phaseOf, fdsOn, weekOfDate } from './shared/plan.js';
-import { zones, fillPaces, fitness, fmt, fmtH, parseT } from './shared/pace.js';
+import { zones, fillPaces, fitness, fmt, fmtH } from './shared/pace.js';
 import { computeModel, modelSessionsOn, isRunAct } from './shared/adapt.js';
 
 // ---------- Estat ----------
@@ -25,6 +25,17 @@ const dShort = d => d.toLocaleDateString('ca-ES', { day: 'numeric', month: 'shor
 const canWrite = () => auth.owner;
 const actKm = a => (+a.distance || 0) / 1000;
 const actDate = a => String(a.start_date_local || '').slice(0, 10);
+// Temps en dues caselles: minuts + segons. Els km accepten coma o punt.
+const numIn = v => { if (v === null || v === undefined) return null; const t = String(v).trim().replace(/\s/g, '').replace(',', '.'); return t === '' || isNaN(+t) ? null : +t; };
+const timeFields = (secs, req = false) => {
+  const m = secs ? Math.floor(Math.round(secs) / 60) : '', sx = secs ? Math.round(secs) % 60 : '';
+  return `<div class="f timef"><span>Temps</span><div class="timebox">
+    <label><input name="tmin" inputmode="numeric" pattern="[0-9]*" value="${m}" placeholder="min" aria-label="Minuts" ${req ? 'required' : ''}><span>min</span></label>
+    <label><input name="tsec" inputmode="numeric" pattern="[0-9]*" value="${sx === '' ? '' : String(sx).padStart(2, '0')}" placeholder="seg" aria-label="Segons" maxlength="2"><span>seg</span></label>
+  </div></div>`;
+};
+const readTime = fd => { const m = numIn(fd.get('tmin')) || 0, sx = numIn(fd.get('tsec')) || 0; if (sx >= 60 || m < 0 || sx < 0) return NaN; const t = Math.round(m * 60 + sx); return t || null; };
+const kmField = (v, ph = '') => `<label class="f">Km<input name="km" inputmode="decimal" autocomplete="off" value="${v == null || v === '' ? '' : String(v).replace('.', ',')}" placeholder="${ph}"></label>`;
 
 function recompute() {
   plan = buildPlan(data.settings.race_date || undefined);
@@ -76,13 +87,13 @@ function dateLabel(d) {
   return `${rel ? rel + ' · ' : ''}${DAYS_L[(d.getDay() + 6) % 7]} ${dm(d)}`;
 }
 
-function stravaBlock(a, s) {
-  if (!isRunAct(a)) return `<div class="strava"><div class="strava-h"><span><b>${a.source === 'manual' ? 'Registre' : 'Strava'}</b> · ${esc(a.name || actKind(a).n)}</span><span class="muted mono">${a.moving_time ? fmtH(a.moving_time) : ''}</span></div>${canWrite() && (a.source || +a.id < 0) ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar</button></div>` : ''}</div>`;
+function actBlock(a, s) {
+  if (!isRunAct(a)) return `<div class="strava"><div class="strava-h"><span><b>Registre</b> · ${esc(a.name || actKind(a).n)}</span><span class="muted mono">${a.moving_time ? fmtH(a.moving_time) : ''}</span></div>${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar</button></div>` : ''}</div>`;
   const k = actKm(a); const pace = a.moving_time && k ? a.moving_time / k : null;
   const hr = a.avg_hr ? `${Math.round(a.avg_hr)}${a.max_hr ? `<small class="muted">/${Math.round(a.max_hr)}</small>` : ''}` : '—';
   const opts = canWrite() ? assignSelect(a, s ? s.week : weekOfDate(plan, fromIso(actDate(a)))) : '';
   return `<div class="strava" data-act="${a.id}">
-    <div class="strava-h"><span><b>Strava</b> · ${esc(a.name || 'Cursa')}</span><span class="muted mono">${dShort(fromIso(actDate(a)))} ${String(a.start_date_local || '').slice(11, 16)}</span></div>
+    <div class="strava-h"><span><b>Activitat</b> · ${esc(a.name || 'Cursa')}</span><span class="muted mono">${dShort(fromIso(actDate(a)))} ${String(a.start_date_local || '').slice(11, 16)}</span></div>
     <div class="metrics">
       <div><b>${km1(k)}</b><span>km</span></div>
       <div><b>${a.moving_time ? fmtH(a.moving_time) : '—'}</b><span>temps</span></div>
@@ -94,8 +105,7 @@ function stravaBlock(a, s) {
       ${a.splits && a.splits.length ? splitsTable(a.splits) : ''}
     </details>` : ''}
     ${opts}
-    ${+a.id > 0 ? `<a class="small" href="https://www.strava.com/activities/${a.id}" target="_blank" rel="noopener">Obre a Strava ↗</a>` : ''}
-    ${canWrite() && (a.source || +a.id < 0) ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}
+    ${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}
   </div>`;
 }
 
@@ -129,10 +139,10 @@ function sessCard(s) {
   const isToday = iso(d) === todayIso();
   const kmNow = model.km(s); const kmChanged = run && kmNow !== s.km;
   const manualMove = data.moves[s.id];
-  const byStrava = acts.length > 0;
+  const byAct = acts.length > 0;
   const notes = [...(adj?.notes || [])];
   if (manualMove) notes.push(`Moguda per tu (era el ${DAYS_L[s.d]} ${dm(s.baseDate)}).`);
-  const logBits = [log.km != null && log.km !== '' ? `${km1(log.km)} km` : '', log.min ? `${log.min}′` : '', log.rpe ? `esforç ${log.rpe}/10` : ''].filter(Boolean).join(' · ');
+  const logBits = [log.km != null && log.km !== '' ? `${km1(log.km)} km` : '', log.min ? fmtH(log.min * 60) : '', log.rpe ? `esforç ${log.rpe}/10` : ''].filter(Boolean).join(' · ');
   const dayOpts = []; for (let i = 0; i < 7; i++) { const x = plan.dateOf(s.week, i); dayOpts.push(`<button type="button" data-mv="${s.id}" data-date="${iso(x)}" aria-pressed="${iso(x) === iso(d)}">${DAYS[i]} ${x.getDate()}</button>`); }
   return `<article class="sess t-${s.type} ${isToday ? 'today' : ''} ${done ? 'is-done' : ''} ${auto.lost || auto.dropped ? 'lost' : ''}" id="s-${s.id}">
     <div class="sess-h">
@@ -140,31 +150,35 @@ function sessCard(s) {
         <div class="sess-meta"><span class="tchip">${t.n}</span><span>${dateLabel(d)}</span>${auto.moved ? '<span class="chip warn">recol·locada</span>' : ''}${auto.lost ? '<span class="chip">perduda</span>' : ''}${adj?.soft ? '<span class="chip warn">suavitzada</span>' : ''}</div>
         <div class="sess-title"><h3>${esc(model.title(s))}</h3>${run && s.km ? `<span class="mono small">${kmChanged ? `<s>${km1(s.km)}</s> ` : ''}${km1(kmNow)} km</span>` : ''}</div>
       </div>
-      <button type="button" class="check ${canWrite() ? '' : 'ro'}" data-done="${s.id}" aria-pressed="${done}" ${!canWrite() || byStrava ? 'disabled' : ''}
-        aria-label="${done ? 'Feta' : 'Marcar com a feta'}" title="${byStrava ? 'Registrada a Strava' : done ? 'Feta' : 'Marcar com a feta'}">${ICON_CHECK}</button>
+      <button type="button" class="check ${canWrite() ? '' : 'ro'}" data-done="${s.id}" aria-pressed="${done}" ${!canWrite() || byAct ? 'disabled' : ''}
+        aria-label="${done ? 'Feta' : 'Marcar com a feta'}" title="${byAct ? 'Registrada' : done ? 'Feta' : 'Marcar com a feta'}">${ICON_CHECK}</button>
     </div>
     <div class="sess-b">
       <div class="detail">${fill(s.detail)}</div>
       ${notes.length ? `<div class="adj">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
-      ${acts.map(a => stravaBlock(a, s)).join('')}
+      ${acts.map(a => actBlock(a, s)).join('')}
       ${(logBits || log.note) && !canWrite() ? `<p class="small muted">${esc(logBits)}${log.note ? ` · «${esc(log.note)}»` : ''}</p>` : ''}
-      ${canWrite() ? `<details class="more"><summary>${logBits || log.note ? `Registre: ${esc(logBits || 'nota')}` : 'Registrar · moure'}</summary>
+      ${canWrite() ? `<div class="menus">
+      <details class="more menu"><summary>${logBits || log.note ? `📝 Registre: ${esc(logBits || 'nota')}` : '📝 Registrar'}</summary>
         <form class="subsec logform" data-id="${s.id}">
           <div class="formgrid">
-            ${run ? `<label class="f">Km<input name="km" inputmode="decimal" value="${log.km ?? ''}" placeholder="${byStrava ? km1(model.sessionKm(s)) : km1(kmNow)}"></label>` : ''}
-            <label class="f">Minuts<input name="min" inputmode="numeric" value="${log.min ?? ''}"></label>
+            ${run ? kmField(log.km, byAct ? km1(model.sessionKm(s)) : km1(kmNow)) : ''}
+            ${timeFields(log.min ? log.min * 60 : null)}
             <label class="f">Esforç 1–10<select name="rpe"><option value=""></option>${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => `<option ${log.rpe === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
             <label class="f wide">Nota<input name="note" maxlength="500" value="${esc(log.note || '')}" placeholder="Sensacions, espatlla…"></label>
           </div>
-          <p class="small muted">L'esforç ajuda el pla a adaptar-se: 8 o més vol dir fatiga; 4 o menys, que vas sobrat.</p>
+          <p class="small muted">Km amb coma o punt (6,5 o 6.5). L'esforç ajuda el pla a adaptar-se: 8 o més vol dir fatiga; 4 o menys, que vas sobrat.</p>
           <div class="row"><button class="btn primary sm" type="submit">Desar</button>${data.logs[s.id] ? `<button class="btn sm ghost" type="button" data-clear="${s.id}">Esborrar registre</button>` : ''}</div>
         </form>
+      </details>
+      <details class="more menu"><summary>${manualMove ? '📅 Moguda · canviar' : '📅 Moure'}</summary>
         <div class="subsec">
           <span class="eyebrow">Moure a un altre dia</span>
           <div class="daybtns">${dayOpts.join('')}</div>
           <div class="row"><input type="date" id="mvd-${s.id}" min="${iso(plan.start)}" max="${iso(plan.race)}" value="${iso(d)}" style="max-width:180px"><button class="btn sm" type="button" data-mvpick="${s.id}">Moure</button>${manualMove ? `<button class="btn sm ghost" type="button" data-mv="${s.id}" data-date="">Tornar al seu dia</button>` : ''}</div>
         </div>
-      </details>` : ''}
+      </details>
+      </div>` : ''}
     </div>
   </article>`;
 }
@@ -180,14 +194,13 @@ const actKind = a => {
 function extraCard(a) {
   const d = fromIso(actDate(a)); const k = actKind(a); const km = actKm(a);
   const bits = [km ? `${km1(km)} km` : '', a.moving_time ? fmtH(a.moving_time) : '', a.rpe ? `esforç ${a.rpe}/10` : ''].filter(Boolean).join(' · ');
-  const api = +a.id > 0 && !a.source;
   return `<article class="sess t-${k.t} extra is-done">
-    <div class="sess-h"><div><div class="sess-meta"><span class="tchip">Extra · ${k.n}</span><span>${dateLabel(d)}</span>${a.source === 'paste' || a.source === 'csv' || api ? '<span class="chip orange">Strava</span>' : ''}</div>
+    <div class="sess-h"><div><div class="sess-meta"><span class="tchip">Extra · ${k.n}</span><span>${dateLabel(d)}</span></div>
     <div class="sess-title"><h3>${esc(a.name || (isRunAct(a) ? 'Cursa fora del pla' : k.n))}</h3>${bits ? `<span class="mono small">${bits}</span>` : ''}</div></div>
     <span class="check" aria-hidden="true" style="--tc:var(--t-${k.t});background:var(--tc);border-color:var(--tc);color:#fff">${ICON_CHECK}</span></div>
     <div class="sess-b">${a.note ? `<p class="small">«${esc(a.note)}»</p>` : ''}
       <p class="small muted">${isRunAct(a) ? 'Compta als km de la setmana i el pla s\'adapta si cal.' : 'Queda registrada, però no suma km de cursa.'}</p>
-      ${api ? stravaBlock(a, null) : `${isRunAct(a) && canWrite() ? assignSelect(a, weekOfDate(plan, d)) : ''}${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}`}
+      ${isRunAct(a) && canWrite() ? assignSelect(a, weekOfDate(plan, d)) : ''}${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}
     </div></article>`;
 }
 
@@ -201,131 +214,14 @@ function addBlock(date) {
     <div class="formgrid">
       <label class="f">Tipus<select name="type">${ADD_TYPES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label>
       <label class="f wide">Nom<input name="name" maxlength="80" placeholder="Rodatge amb amics, partit…"></label>
-      <label class="f">Km<input name="km" inputmode="decimal"></label>
-      <label class="f">Minuts<input name="min" inputmode="numeric"></label>
+      ${kmField('')}
+      ${timeFields(null)}
       <label class="f">Esforç 1–10<select name="rpe"><option value=""></option>${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => `<option>${v}</option>`).join('')}</select></label>
       <label class="f wide">Nota<input name="note" maxlength="500" placeholder="Sensacions, espatlla…"></label>
     </div>
     <div class="row"><button class="btn primary sm" type="submit">Afegir</button><button class="btn sm ghost" type="button" data-addcancel="1">Cancel·lar</button></div>
   </form>`;
 }
-
-// ---------- Importar de Strava (sense connexió: enganxar la taula o activities.csv) ----------
-const MES = { ene: 0, gen: 0, jan: 0, feb: 1, mar: 2, abr: 3, apr: 3, may: 4, mai: 4, jun: 5, jul: 6, ago: 7, aug: 7, set: 8, sep: 8, sept: 8, oct: 9, nov: 10, dic: 11, des: 11, dec: 11 };
-const two = n => String(n).padStart(2, '0');
-function hashId(str) { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return -(4294967296 * (2097151 & h2) + (h1 >>> 0)) || -1; }
-function sportCat(s) {
-  s = s.toLowerCase();
-  if (/carrera|cursa|run|c[oó]rrer|trail/.test(s)) return 'run';
-  if (/p[aàá]del|tenis|tennis|squash|pickle|r[aàá]quet|racquet|b[aàá]dminton/.test(s)) return 'padel';
-  if (/pesas|peses|weight|entrenamiento|entrenament|workout|crossfit|hiit|strength|fuerza|for[cç]a|pilates|yoga/.test(s)) return 'gym';
-  if (/bici|ride|cycl|cicl/.test(s)) return 'ride';
-  return 'other';
-}
-function parsePaste(text) {
-  const re = /^\s*(.+?)\s+(?:[a-zà-úé]{2,4}\.?,\s*)?(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(.+?)\s+((?:\d{1,2}:)?\d{1,2}:\d{2})(?:\s+([\d.,]+)\s*(km|mi))?/i;
-  let lines = text.split(/\r?\n/).map(l => l.replace(/\t/g, ' '));
-  if (!lines.some(l => re.test(l))) lines = text.replace(/\s+/g, ' ').split(/Editar\s+Eliminar(?:\s+Compartir)?|Edit\s+Delete(?:\s+Share)?|Edita\s+Elimina(?:\s+Comparteix)?/i);
-  const out = [];
-  for (const line of lines) {
-    const m = line.match(re); if (!m) continue;
-    const [, sport, dd, mo, y, name, time, dist, unit] = m;
-    if (/^(deporte|esport|sport)$/i.test(sport.trim())) continue;
-    const date = `${y}-${two(mo)}-${two(dd)}`; const secs = parseT(time);
-    let km = dist ? parseFloat(dist.replace(/\.(?=\d{3}\b)/g, '').replace(',', '.')) : null;
-    if (km != null && unit && unit.toLowerCase() === 'mi') km *= 1.609;
-    out.push({ id: hashId(`${date}|${sport.trim()}|${secs}|${name.trim()}`), date, sport: sport.trim(), name: name.trim(), km: km > 0 ? km : null, secs });
-  }
-  return out;
-}
-function parseCsvDate(s) {
-  s = String(s || '').trim().toLowerCase(); let m;
-  if ((m = s.match(/(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
-  if ((m = s.match(/(\d{1,2})\s+(?:de\s+)?([a-z]{3,4})\.?\s+(?:de\s+)?(\d{4})/)) && MES[m[2]] != null) return `${m[3]}-${two(MES[m[2]] + 1)}-${two(m[1])}`;
-  if ((m = s.match(/([a-z]{3,4})\.?\s+(\d{1,2}),?\s+(\d{4})/)) && MES[m[1]] != null) return `${m[3]}-${two(MES[m[1]] + 1)}-${two(m[2])}`;
-  return null;
-}
-function parseCsv(text) {
-  const rows = []; let row = [], cur = '', q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
-    else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
-    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
-    else cur += c;
-  }
-  if (cur || row.length) { row.push(cur); rows.push(row); }
-  if (!rows.length) return null;
-  const h = rows[0].map(x => x.trim().toLowerCase());
-  const find = (...n) => { for (const x of n) { const i = h.indexOf(x); if (i >= 0) return i; } return -1; };
-  const iId = find('activity id', 'id de la actividad', 'id de l\'activitat'), iDate = find('activity date', 'fecha de la actividad', 'data de l\'activitat');
-  const iName = find('activity name', 'nombre de la actividad', 'nom de l\'activitat'), iType = find('activity type', 'tipo de actividad', 'tipus d\'activitat');
-  const iDist = find('distance', 'distancia', 'distància'), iEl = find('elapsed time', 'tiempo transcurrido', 'temps transcorregut');
-  const iMov = Math.max(h.lastIndexOf('moving time'), h.lastIndexOf('tiempo en movimiento'), h.lastIndexOf('temps en moviment'));
-  if (iDate < 0 || iType < 0) return null;
-  return rows.slice(1).filter(r => r.length > iType).map(r => {
-    const date = parseCsvDate(r[iDate]); if (!date) return null;
-    let km = iDist >= 0 ? parseFloat(String(r[iDist]).replace(',', '.')) : NaN; if (km > 300) km /= 1000;
-    const secs = Math.round(+(iMov >= 0 && r[iMov] ? r[iMov] : r[iEl] || 0)) || null;
-    const id = iId >= 0 && /^\d+$/.test(String(r[iId]).trim()) ? +String(r[iId]).trim() : hashId(`${date}|${r[iType]}|${secs}`);
-    return { id, date, sport: r[iType].trim(), name: iName >= 0 ? r[iName].trim() : r[iType].trim(), km: km > 0 ? km : null, secs };
-  }).filter(Boolean);
-}
-async function importStrava(list, source) {
-  const have = new Set(data.activities.map(a => String(a.id)));
-  const inPlan = list.filter(a => a.date >= iso(addDays(plan.start, -14)) && a.date <= iso(plan.race));
-  const rows = [];
-  for (const a of inPlan) {
-    if (have.has(String(a.id)) || rows.some(r => r.id === a.id)) continue;
-    const cat = sportCat(a.sport);
-    const sport_type = cat === 'run' ? (/trail|montaña|muntanya/i.test(a.sport) ? 'TrailRun' : 'Run') : cat === 'padel' ? 'Padel' : cat === 'gym' ? 'WeightTraining' : cat === 'ride' ? 'Ride' : 'Workout';
-    let session_id = null;
-    if (cat !== 'run') {
-      const want = cat === 'padel' ? 'p' : cat === 'gym' ? 'g' : null;
-      const s = want && modelSessionsOn(plan, model, fromIso(a.date)).find(x => x.type === want && !model.done(x.id) && !rows.some(r => r.session_id === x.id));
-      session_id = s ? s.id : 'none';
-    }
-    rows.push({ id: a.id, name: a.name || a.sport, sport_type, start_date: new Date(a.date + 'T12:00:00').toISOString(), start_date_local: `${a.date}T12:00:00Z`,
-      distance: a.km ? Math.round(a.km * 1000) : 0, moving_time: a.secs, elapsed_time: a.secs, session_id, ignored: false, source });
-  }
-  await store.addActivities(data, rows);
-  return { added: rows.length, dup: inPlan.length - rows.length, outside: list.length - inPlan.length };
-}
-function stravaDialog() {
-  let dlg = document.getElementById('stDlg');
-  if (!dlg) {
-    dlg = document.createElement('dialog'); dlg.id = 'stDlg'; dlg.className = 'dlg';
-    dlg.innerHTML = `<form method="dialog" class="dlg-in" id="stForm">
-      <div class="row between"><h2>Importar de Strava</h2><button class="iconbtn close" value="cancel" aria-label="Tancar">×</button></div>
-      <ol class="steps">
-        <li>Obre <a href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">strava.com/athlete/training</a> (Les meves activitats).</li>
-        <li>Selecciona la taula d'activitats, de la primera fila a l'última, i copia-la.</li>
-        <li>Enganxa-la aquí i prem <b>Importar</b>. Cada cursa, partit o sessió de gimnàs marca la sessió d'aquell dia; la resta entra com a dia extra.</li>
-      </ol>
-      <textarea id="stPaste" rows="6" placeholder="Carrera  lun, 9/11/2026  Morning Run  32:10  6,02 km  12 m"></textarea>
-      <div class="row"><button type="button" class="btn accent" id="stPasteGo">Importar</button>
-        <label class="btn sm ghost filebtn">Pujar activities.csv<input type="file" id="stCsv" accept=".csv,text/csv" hidden></label></div>
-      <p class="small muted" id="stMsg">L'activities.csv ve a l'exportació gratuïta de Strava (Configuració → El meu compte → Descarrega les teves dades). Les activitats ja importades no es dupliquen.</p>
-      <p class="small muted">Vols que arribin soles? Connecta Strava a Ajustos: l'API de Strava és gratuïta, no cal subscripció.</p>
-    </form>`;
-    document.body.appendChild(dlg);
-    const msg = t => { dlg.querySelector('#stMsg').textContent = t; };
-    const run = async (list, source) => {
-      if (!list || !list.length) { msg('No hi he trobat activitats. Copia la taula de "Les meves activitats" o puja l\'activities.csv.'); return; }
-      try {
-        setSync('busy', 'Desant…');
-        const r = await importStrava(list, source); recompute(); render(); setSync('ok', 'Sincronitzat');
-        msg(`${r.added} activitats importades${r.dup ? ` · ${r.dup} ja hi eren` : ''}${r.outside ? ` · ${r.outside} fora del pla` : ''}.`);
-        toast(`Strava: ${r.added} activitats importades`);
-      } catch (e) { console.error(e); setSync('err', 'Error'); msg('No s\'ha pogut desar: ' + (e.message || e)); }
-    };
-    dlg.querySelector('#stPasteGo').onclick = () => run(parsePaste(dlg.querySelector('#stPaste').value), 'paste');
-    dlg.querySelector('#stCsv').onchange = async e => { const f = e.target.files[0]; if (!f) return; const l = parseCsv(await f.text()); if (!l) return msg('Aquest CSV no sembla l\'activities.csv de Strava.'); run(l, 'csv'); e.target.value = ''; };
-  }
-  dlg.querySelector('#stPaste').value = '';
-  dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
-}
-const stravaBtn = () => canWrite() ? `<button type="button" class="btn strava-btn" id="stImport"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10 3 4 15h3.6L10 10.2 12.4 15H16zm6 12-1.8 3.6L12.4 15H9.8l4.4 8.6 4.4-8.6z"/></svg>${data.strava?.connected ? 'Sincronitzar Strava' : 'Importar de Strava'}</button>` : '';
 
 // ---------- Vista: Avui ----------
 function trackSvg() {
@@ -381,7 +277,7 @@ function renderAvui() {
     <div class="row between"><h2>Avui</h2><span class="muted small">${DAYS_L[(t.getDay() + 6) % 7]} ${catDate(t)}</span></div>
     ${todayS.length ? todayS.map(sessCard).join('') : `<div class="rest"><b>Descans</b><span>${next ? `Següent: ${next.ss.map(s => esc(model.title(s))).join(' + ')} · ${dateLabel(next.d)}` : 'Gaudeix-ne.'}</span></div>`}
     ${extrasToday.map(extraCard).join('')}
-    <div class="row">${stravaBtn()}${addBlock(todayIso())}</div>
+    ${addBlock(todayIso())}
     ${todayS.length && tomorrow.length ? `<div class="card tight"><span class="eyebrow">Demà</span>${tomorrow.map(s => `<div class="row"><span class="dot t-${s.type}"></span><b>${esc(model.title(s))}</b><span class="muted small">${TYPES[s.type].n}${isRun(s.type) && model.km(s) ? ' · ' + km1(model.km(s)) + ' km' : ''}</span></div>`).join('')}</div>` : ''}
     ${fdsBox(W)}
     ${statsHtml()}
@@ -428,7 +324,6 @@ function renderSetmana() {
     ${W.note ? `<div class="note">${esc(W.note)}</div>` : ''}
     ${hist.length ? `<div class="card tight"><span class="eyebrow">Ajustos automàtics</span><div class="hist">${hist.map(histRow).join('')}</div></div>` : ''}
     ${fdsBox(W)}
-    <div class="row">${stravaBtn()}</div>
     ${days}
     <p class="small muted">Si et saltes una tirada llarga o una sessió de qualitat, el pla la recol·loca sola dins la setmana. Els rodatges suaus no es recuperen.</p>`;
 }
@@ -490,7 +385,7 @@ function renderProgres() {
         ${canWrite() ? `<form id="testForm" class="formgrid">
           <label class="f">Data<input type="date" name="date" required value="${todayIso()}"></label>
           <label class="f">Distància<select name="dist"><option value="5">5 km</option><option value="10">10 km</option><option value="21.0975">Mitja</option><option value="42.195">Marató</option></select></label>
-          <label class="f">Temps<input name="time" placeholder="24:30" required inputmode="numeric"></label>
+          ${timeFields(null, true)}
           <label class="f">Nom<input name="label" placeholder="Test 5 km" maxlength="80"></label>
           <button class="btn primary sm wide" type="submit">Afegir test</button></form>` : ''}
         <div class="list">${[...data.tests].sort((a, b) => String(b.date).localeCompare(String(a.date))).map(t => `<div class="li"><span><b class="mono">${fmtH(t.secs)}</b> · ${esc(t.label || 'Test')} <span class="muted small">${km1(t.dist)} km · ${new Date(t.date).toLocaleDateString('ca-ES')}</span></span>${canWrite() ? `<button class="btn sm ghost" data-deltest="${t.id}">Esborrar</button>` : '<span></span>'}</div>`).join('') || '<p class="muted small">Encara no hi ha tests.</p>'}</div>
@@ -500,8 +395,8 @@ function renderProgres() {
       <div class="row small muted"><span><span class="dot" style="--tc:var(--primary);border-radius:2px"></span> Fets</span><span style="color:var(--accent)">- - Pla adaptat</span><span>··· Pla original</span></div></div>
     <div class="card"><span class="eyebrow">Historial d'ajustos ${model.adaptOn ? '' : '(adaptació desactivada)'}</span>
       <div class="hist">${model.history.length ? [...model.history].sort((a, b) => b.week - a.week).map(histRow).join('') : '<p class="muted small">Encara cap ajust: el pla s\'adapta quan acaba cada setmana i quan et saltes o afegeixes sessions.</p>'}</div></div>
-    <div class="card"><div class="row between"><span class="eyebrow">Activitats de Strava</span>${stravaBtn()}</div><div class="row between">${data.strava?.last_sync ? `<span class="muted small">Sincronitzat ${new Date(data.strava.last_sync).toLocaleString('ca-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>` : ''}</div>
-      <div class="list">${acts.length ? acts.map(a => `<div class="li"><span><b class="mono">${km1(actKm(a))} km</b> · ${esc(a.name || '')}<br><span class="muted small">${dShort(fromIso(actDate(a)))} · ${a.moving_time ? fmt(a.moving_time / actKm(a)) + '/km' : ''}${a.avg_hr ? ' · ' + Math.round(a.avg_hr) + ' ppm' : ''} → ${esc(where(a))}</span></span>${canWrite() ? `<a class="btn sm ghost" href="#setmana/${weekOfDate(plan, fromIso(actDate(a)))}">Veure</a>` : '<span></span>'}</div>`).join('') : `<p class="muted small">${data.strava?.connected ? 'Encara no hi ha curses importades.' : 'Strava no està connectat (Ajustos).'}</p>`}</div></div>`;
+    <div class="card"><span class="eyebrow">Activitats registrades</span>
+      <div class="list">${acts.length ? acts.map(a => `<div class="li"><span><b class="mono">${km1(actKm(a))} km</b> · ${esc(a.name || '')}<br><span class="muted small">${dShort(fromIso(actDate(a)))} · ${a.moving_time ? fmt(a.moving_time / actKm(a)) + '/km' : ''}${a.avg_hr ? ' · ' + Math.round(a.avg_hr) + ' ppm' : ''} → ${esc(where(a))}</span></span>${canWrite() ? `<a class="btn sm ghost" href="#setmana/${weekOfDate(plan, fromIso(actDate(a)))}">Veure</a>` : '<span></span>'}</div>`).join('') : '<p class="muted small">Encara no hi ha activitats. Afegeix-ne amb "+ Afegir activitat" a qualsevol dia.</p>'}</div></div>`;
 }
 
 // ---------- Vista: Ritmes ----------
@@ -526,7 +421,7 @@ function renderRitmes() {
       <li><b>Afinament (S23–25)</b>: mai s'hi afegeix volum.</li></ul>
       <p class="small muted">Pots desactivar l'adaptació a Ajustos. Els moviments que facis tu manen sobre els automàtics.</p></div>
     <div class="grid2">
-      <div class="card"><span class="eyebrow">Punt de partida (Strava)</span><ul class="tight">
+      <div class="card"><span class="eyebrow">Punt de partida</span><ul class="tight">
         <li>Mitja Marató de Barcelona, 15/2/2026: <b class="mono">1:46:51</b> (5:04/km)</li>
         <li>Volum habitual: 2–3 sortides de 4–10 km per setmana; màxim fora de curses, 17 km</li>
         <li>Última cursa registrada: 5/6/2026 (6 km). Gairebé 5 mesos aturat.</li>
@@ -551,13 +446,13 @@ function renderRitmes() {
 
 // ---------- Vista: Ajustos ----------
 async function renderAjustos() {
-  const s = data.settings; const st = data.strava || {};
+  const s = data.settings;
   const pushOk = 'serviceWorker' in navigator && 'PushManager' in window && CONFIG.VAPID_PUBLIC_KEY && !store.demo;
   const publicUrl = location.origin + location.pathname;
   const cal = store.calendarUrl();
   view.innerHTML = `
     <h1>Ajustos</h1>
-    ${store.demo ? `<div class="note">Mode demo: les dades es desen en aquest navegador. Omple <span class="mono">web/js/config.js</span> amb les claus de Supabase (vegeu el README) per sincronitzar-ho tot i connectar Strava.</div>` : ''}
+    ${store.demo ? `<div class="note">Mode demo: les dades es desen en aquest navegador. Omple <span class="mono">web/js/config.js</span> amb les claus de Supabase (vegeu el README) per sincronitzar-ho tot.</div>` : ''}
     <div class="card"><span class="eyebrow">Compte</span>
       ${!store.demo && auth.user && store.recovery ? `<p><b>Crea la teva contrasenya</b></p>
         <form id="setpw" class="formgrid"><label class="f wide">Nova contrasenya (mínim 8 caràcters)<input type="password" name="pw" minlength="8" autocomplete="new-password" required></label>
@@ -579,14 +474,6 @@ async function renderAjustos() {
         <div class="seg grid3" role="group" aria-label="Ritme objectiu">${[290, 300, 310, 315, 320, 330].map(v => `<button type="button" data-goal="${v}" aria-pressed="${s.goal_pace === v}" ${canWrite() ? '' : 'disabled'}>${fmt(v)}</button>`).join('')}</div>
         <span class="small muted mono">= ${fmtH(s.goal_pace * 42.195)} a meta</span></div>
       <label class="switch"><span><b>Adaptació automàtica</b><br><span class="small muted">El pla s'ajusta sol al que fas de veritat.</span></span><input type="checkbox" id="adapt" ${s.adapt !== false ? 'checked' : ''} ${canWrite() ? '' : 'disabled'}></label>
-    </div>
-    <div class="card"><span class="eyebrow">Strava</span>
-      ${st.connected ? `<p><span class="chip green">Connectat</span> ${st.last_sync ? `<span class="small muted">Última sincronització: ${new Date(st.last_sync).toLocaleString('ca-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>` : ''}</p>
-        <p class="small muted">Les curses noves arriben soles (webhook). Si en falta alguna, sincronitza.</p>
-        ${canWrite() ? `<div class="row"><button class="btn sm" id="stSync">Sincronitzar ara</button><button class="btn sm ghost" id="stOff">Desconnectar</button></div>` : ''}`
-        : `<p class="small muted">Connecta Strava i cada cursa es marcarà sola amb km, temps, ritme, FC, mapa i parcials.</p>
-        ${canWrite() ? `<div class="row"><button class="btn accent" id="stOn" ${store.demo || !CONFIG.STRAVA_CLIENT_ID ? 'disabled' : ''}>Connectar amb Strava</button>${stravaBtn()}</div>
-        <p class="small muted">${store.demo || !CONFIG.STRAVA_CLIENT_ID ? 'La connexió automàtica (gratuïta, sense subscripció) s\'activa quan configures Supabase i l\'app de Strava (vegeu el README). Mentrestant, "Importar de Strava" et deixa enganxar la taula d\'activitats o pujar l\'activities.csv.' : ''}</p>` : ''}`}
     </div>
     <div class="card"><span class="eyebrow">Les teves dades</span>
       <p class="small">${store.demo ? '<b>Mode demo:</b> les dades només es desen en aquest navegador. Si esborres les dades del navegador o canvies de mòbil, es perden. Fes còpies sovint o configura Supabase perquè es desin al núvol.' : 'Les dades es desen a la teva base de dades de Supabase i es veuen des de qualsevol dispositiu.'}</p>
@@ -690,13 +577,6 @@ view.addEventListener('click', async e => {
   if (ds.deltest) { if (confirm('Esborrar aquest test?')) return act(() => store.deleteTest(data, ds.deltest), 'Test esborrat'); return; }
   if (ds.copy) { const i = document.getElementById(ds.copy); try { await navigator.clipboard.writeText(i.value); toast('Copiat'); } catch { i.select(); } return; }
   switch (t.id) {
-    case 'stImport':
-      if (data.strava?.connected) {
-        t.disabled = true;
-        try { const r = await store.invoke('strava-connect', { action: 'sync' }); toast(`${r.saved} curses actualitzades`); await refresh(); } catch (err) { toast('Error: ' + err.message); t.disabled = false; }
-        return;
-      }
-      stravaDialog(); return;
     case 'bkDown': {
       const blob = new Blob([store.exportAll(data)], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `marato27-copia-${todayIso()}.json`;
@@ -713,17 +593,6 @@ view.addEventListener('click', async e => {
     case 'demoDrop': if (confirm('Descartar les dades del mode demo d\'aquest navegador?')) { store.clearDemo(); render(); } return;
     case 'logout': await store.signOut(); auth = await store.session(); recompute(); render(); return;
     case 'install': installEvt.prompt(); installEvt = null; return;
-    case 'stOn': {
-      const redirect = location.origin + location.pathname;
-      location.href = `https://www.strava.com/oauth/authorize?client_id=${encodeURIComponent(CONFIG.STRAVA_CLIENT_ID)}&response_type=code&approval_prompt=auto&scope=read,activity:read_all&state=strava&redirect_uri=${encodeURIComponent(redirect)}`;
-      return;
-    }
-    case 'stSync': {
-      t.disabled = true; t.textContent = 'Sincronitzant…';
-      try { const r = await store.invoke('strava-connect', { action: 'sync' }); toast(`${r.saved} curses actualitzades`); await refresh(); } catch (err) { toast('Error: ' + err.message); t.disabled = false; t.textContent = 'Sincronitzar ara'; }
-      return;
-    }
-    case 'stOff': if (confirm('Desconnectar Strava? Les curses ja importades es mantenen.')) { try { await store.invoke('strava-connect', { action: 'disconnect' }); await refresh(); toast('Strava desconnectat'); } catch (err) { toast('Error: ' + err.message); } } return;
     case 'pushOn': {
       try {
         if (await Notification.requestPermission() !== 'granted') return toast('Permís denegat');
@@ -747,20 +616,24 @@ view.addEventListener('submit', async e => {
   const num = v => (v === null || v === '') ? null : +String(v).replace(',', '.');
   if (f.classList.contains('logform')) {
     const id = f.dataset.id; const cur = data.logs[id] || {};
-    const row = { done: cur.done || !!(num(fd.get('km')) || num(fd.get('min'))), km: num(fd.get('km')), min: num(fd.get('min')), rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null };
+    const km = numIn(fd.get('km')); const secs = readTime(fd);
+    if (Number.isNaN(secs)) return toast('Els segons han d\'anar de 0 a 59');
+    if (fd.get('km') && km == null) return toast('Escriu els km amb números (6,5 o 6.5)');
+    const row = { done: cur.done || !!(km || secs), km, min: secs ? Math.round(secs / 60 * 100) / 100 : null, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null };
     return act(() => store.saveLog(data, id, row), 'Desat ✓');
   }
   if (f.id === 'addForm') {
-    const date = f.dataset.date; const type = fd.get('type'); const km = num(fd.get('km')); const min = num(fd.get('min'));
+    const date = f.dataset.date; const type = fd.get('type'); const km = numIn(fd.get('km')); const secs = readTime(fd);
+    if (Number.isNaN(secs)) return toast('Els segons han d\'anar de 0 a 59');
     const name = String(fd.get('name') || '').trim().slice(0, 80) || (ADD_TYPES.find(x => x[0] === type) || [, 'Activitat'])[1];
     const a = { id: -Date.now(), name, sport_type: type, start_date: new Date(date + 'T12:00:00').toISOString(), start_date_local: `${date}T12:00:00Z`,
-      distance: km ? Math.round(km * 1000) : 0, moving_time: min ? Math.round(min * 60) : null, elapsed_time: min ? Math.round(min * 60) : null,
+      distance: km ? Math.round(km * 1000) : 0, moving_time: secs || null, elapsed_time: secs || null,
       session_id: 'none', ignored: false, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null, source: 'manual' };
     addOpen = null;
     return act(() => store.addActivities(data, [a]), 'Activitat afegida ✓');
   }
   if (f.id === 'testForm') {
-    const secs = parseT(fd.get('time')); if (!secs) return toast('Escriu el temps com mm:ss o h:mm:ss');
+    const secs = readTime(fd); if (!secs || Number.isNaN(secs)) return toast('Escriu el temps: minuts i segons (0–59)');
     return act(() => store.addTest(data, { date: fd.get('date'), dist: +fd.get('dist'), secs, label: String(fd.get('label') || '').slice(0, 80) || null }), 'Test desat ✓ · ritmes recalculats');
   }
   if (f.id === 'setpw') {
@@ -830,16 +703,6 @@ recompute(); render();
 (async () => {
   try { auth = await store.init(); } catch (e) { console.error(e); setSync('err', 'Sense connexió'); }
   if (store.recovery) { history.replaceState(null, '', location.pathname + '#ajustos'); toast('Crea la teva contrasenya a Ajustos'); }
-  // Tornada de l'autorització de Strava
-  const qs = new URLSearchParams(location.search);
-  if (qs.get('state') === 'strava') {
-    history.replaceState(null, '', location.pathname + '#ajustos');
-    if (qs.get('code') && auth.owner) {
-      toast('Connectant amb Strava…');
-      try { const r = await store.invoke('strava-connect', { code: qs.get('code') }); toast(`Strava connectat · ${r.saved} curses importades`); }
-      catch (e) { toast('Error amb Strava: ' + e.message); }
-    } else if (qs.get('error')) toast('Connexió amb Strava cancel·lada');
-  }
   await refresh();
   // Refresca en tornar a l'app i a mitjanit
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
