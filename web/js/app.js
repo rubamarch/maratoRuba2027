@@ -559,12 +559,19 @@ async function renderAjustos() {
     <h1>Ajustos</h1>
     ${store.demo ? `<div class="note">Mode demo: les dades es desen en aquest navegador. Omple <span class="mono">web/js/config.js</span> amb les claus de Supabase (vegeu el README) per sincronitzar-ho tot i connectar Strava.</div>` : ''}
     <div class="card"><span class="eyebrow">Compte</span>
+      ${!store.demo && auth.user && store.recovery ? `<p><b>Crea la teva contrasenya</b></p>
+        <form id="setpw" class="formgrid"><label class="f wide">Nova contrasenya (mínim 8 caràcters)<input type="password" name="pw" minlength="8" autocomplete="new-password" required></label>
+        <button class="btn primary wide" type="submit">Desar contrasenya</button></form>` : ''}
       ${store.demo ? '<p class="small">Mode demo: tens permís d\'edició.</p>' : auth.user ? `<div class="row between"><span>${esc(auth.user.email)} ${auth.owner ? '<span class="chip green">propietari</span>' : '<span class="chip">només lectura</span>'}</span><button class="btn sm" id="logout">Tancar sessió</button></div>`
         : `<p class="small muted">Qualsevol persona amb l'enllaç veu el pla. Inicia sessió per editar.</p>
         <form id="login" class="formgrid"><label class="f wide">Correu<input type="email" name="email" autocomplete="username" required></label>
         <label class="f wide">Contrasenya<input type="password" name="password" autocomplete="current-password" required></label>
-        <button class="btn primary wide" type="submit">Iniciar sessió</button></form>`}
+        <button class="btn primary wide" type="submit">Iniciar sessió</button>
+        <button class="btn ghost wide" type="button" id="sendPw">Primer cop o contrasenya oblidada? Envia'm un correu</button></form>`}
     </div>
+    ${!store.demo && auth.owner && store.demoLeftovers() ? `<div class="card"><span class="eyebrow">Dades d'aquest mòbil</span>
+      <p class="small">En aquest navegador hi ha ${store.demoLeftovers().n} registres del mode demo. Puja'ls al núvol perquè no es perdin.</p>
+      <div class="row"><button class="btn primary sm" id="demoUp">Pujar-les al núvol</button><button class="btn ghost sm" id="demoDrop">Descartar</button></div></div>` : ''}
     <div class="card"><span class="eyebrow">Cursa i objectiu</span>
       <label class="f">Data de la marató (diumenge)<input type="date" id="raceDate" value="${s.race_date}" ${canWrite() ? '' : 'disabled'}></label>
       <p class="small muted">Si canvia la data, el pla de 25 setmanes es recalcula enrere des del nou diumenge.</p>
@@ -696,6 +703,14 @@ view.addEventListener('click', async e => {
       document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
       toast('Còpia descarregada'); return;
     }
+    case 'sendPw': {
+      const email = view.querySelector('#login [name=email]')?.value.trim();
+      if (!email) return toast('Escriu el teu correu primer');
+      try { await store.sendPasswordEmail(email); toast('Correu enviat: obre l\'enllaç des d\'aquest mòbil'); } catch (err) { toast('Error: ' + err.message); }
+      return;
+    }
+    case 'demoUp': { const d = store.demoLeftovers(); if (!d) return; return act(async () => { await store.importAll(data, d); store.clearDemo(); data = await store.loadAll(); }, 'Dades pujades al núvol ✓'); }
+    case 'demoDrop': if (confirm('Descartar les dades del mode demo d\'aquest navegador?')) { store.clearDemo(); render(); } return;
     case 'logout': await store.signOut(); auth = await store.session(); recompute(); render(); return;
     case 'install': installEvt.prompt(); installEvt = null; return;
     case 'stOn': {
@@ -747,6 +762,11 @@ view.addEventListener('submit', async e => {
   if (f.id === 'testForm') {
     const secs = parseT(fd.get('time')); if (!secs) return toast('Escriu el temps com mm:ss o h:mm:ss');
     return act(() => store.addTest(data, { date: fd.get('date'), dist: +fd.get('dist'), secs, label: String(fd.get('label') || '').slice(0, 80) || null }), 'Test desat ✓ · ritmes recalculats');
+  }
+  if (f.id === 'setpw') {
+    try { await store.setPassword(fd.get('pw')); auth = await store.session(); toast('Contrasenya desada ✓'); recompute(); render(); }
+    catch (err) { toast('Error: ' + err.message); }
+    return;
   }
   if (f.id === 'login') {
     try { auth = await store.signIn(fd.get('email'), fd.get('password')); toast(auth.owner ? 'Sessió iniciada' : 'Aquest compte no és el propietari'); recompute(); render(); }
@@ -809,6 +829,7 @@ window.addEventListener('hashchange', () => { lastTab = null; render(); });
 recompute(); render();
 (async () => {
   try { auth = await store.init(); } catch (e) { console.error(e); setSync('err', 'Sense connexió'); }
+  if (store.recovery) { history.replaceState(null, '', location.pathname + '#ajustos'); toast('Crea la teva contrasenya a Ajustos'); }
   // Tornada de l'autorització de Strava
   const qs = new URLSearchParams(location.search);
   if (qs.get('state') === 'strava') {

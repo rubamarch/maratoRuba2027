@@ -1,7 +1,20 @@
 // POST (propietari): { code } connecta Strava · { action: 'sync', full? } importa curses · { action: 'disconnect' }
-import { admin, cors, json, requireOwner } from '../_shared/server.ts';
+import { admin, cors, env, json, requireOwner } from '../_shared/server.ts';
 import { exchangeCode, backfill, accessToken } from '../_shared/strava.ts';
 import { buildPlan } from '../_shared/plan.js';
+
+/** Dona d'alta (si cal) la subscripció de webhook de Strava perquè les curses noves arribin soles. */
+async function ensureWebhook() {
+  const id = env('STRAVA_CLIENT_ID'), secret = env('STRAVA_CLIENT_SECRET');
+  const callback = `${env('SUPABASE_URL')}/functions/v1/strava-webhook`;
+  const list = await (await fetch(`https://www.strava.com/api/v3/push_subscriptions?client_id=${id}&client_secret=${secret}`)).json();
+  if (Array.isArray(list) && list.some((s: { callback_url: string }) => s.callback_url === callback)) return 'ja actiu';
+  const fd = new FormData();
+  fd.set('client_id', id); fd.set('client_secret', secret); fd.set('callback_url', callback); fd.set('verify_token', env('STRAVA_VERIFY_TOKEN'));
+  const r = await fetch('https://www.strava.com/api/v3/push_subscriptions', { method: 'POST', body: fd });
+  if (!r.ok) throw new Error(`Strava webhook ${r.status}: ${await r.text()}`);
+  return 'creat';
+}
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -21,8 +34,10 @@ Deno.serve(async req => {
         expires_at: t.expires_at, updated_at: new Date().toISOString()
       });
       const saved = await backfill(db, after);
-      return json({ ok: true, saved });
+      const webhook = await ensureWebhook().catch(e => `error: ${(e as Error).message}`);
+      return json({ ok: true, saved, webhook });
     }
+    if (body.action === 'webhook') return json({ ok: true, webhook: await ensureWebhook() });
     if (body.action === 'sync') {
       const saved = await backfill(db, after, body.full ? 200 : 40);
       return json({ ok: true, saved });

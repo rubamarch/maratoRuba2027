@@ -9,6 +9,8 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 
 export const demo = !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
 let sb = null;
+// Enllaç del correu per crear/recuperar la contrasenya (#access_token=…&type=recovery)
+export let recovery = /type=(recovery|invite|signup|magiclink)/.test(location.hash);
 
 export async function init() {
   // Demana al navegador que no esborri les dades locals (cau i mode demo) quan falta espai.
@@ -33,6 +35,22 @@ export async function signIn(email, password) {
   return await session();
 }
 export async function signOut() { await sb.auth.signOut(); }
+export async function sendPasswordEmail(email) {
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) throw error;
+}
+export async function setPassword(password) {
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) throw error;
+  recovery = false;
+}
+// Dades que hi pugui haver del mode demo en aquest navegador (per pujar-les al núvol).
+export function demoLeftovers() {
+  const d = lsGet(DEMO); if (!d) return null;
+  const n = Object.keys(d.logs || {}).length + (d.activities || []).length + (d.tests || []).length + Object.keys(d.moves || {}).length;
+  return n ? { ...d, app: 'marato27', n } : null;
+}
+export const clearDemo = () => { try { localStorage.removeItem(DEMO); } catch { /* bloquejat */ } };
 
 export const cached = () => lsGet(demo ? DEMO : CACHE) || empty();
 

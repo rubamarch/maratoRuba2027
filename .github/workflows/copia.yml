@@ -1,0 +1,36 @@
+name: Còpia de seguretat diària
+# Cada dia desa totes les dades (només lectura pública) a la branca "copies-seguretat".
+# També manté actiu el projecte gratuït de Supabase (es pausa després de 7 dies sense ús).
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      URL: https://ptiuuwyimhjprpwvmdtf.supabase.co/rest/v1
+      KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0aXV1d3lpbWhqcHJwd3ZtZHRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyMjM1MjYsImV4cCI6MjEwOTc5OTUyNn0.YAVvp8BohYLaGecRJqUwezZvNow2EwDpp6kAKn3K-Mo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: copies-seguretat
+        continue-on-error: true
+      - name: Descarrega les dades
+        run: |
+          git rev-parse --verify HEAD >/dev/null 2>&1 || git checkout --orphan copies-seguretat
+          mkdir -p dades
+          for t in settings logs moves weeks tests activities; do
+            curl -sf "$URL/$t?select=*" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | python3 -m json.tool > "dades/$t.json"
+          done
+          ls -la dades
+      - name: Desa la còpia
+        run: |
+          git config user.name "copia-automatica"
+          git config user.email "actions@users.noreply.github.com"
+          git add dades
+          git diff --cached --quiet && { echo "Sense canvis"; exit 0; }
+          git commit -m "Còpia $(date -u +%Y-%m-%d)"
+          git push origin HEAD:copies-seguretat
