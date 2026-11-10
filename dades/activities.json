@@ -1,1 +1,23 @@
-[]
+[
+    {
+        "id": -1794231090311,
+        "name": "Caminar munta\u00f1a",
+        "sport_type": "Workout",
+        "start_date": "2026-11-07T11:00:00+00:00",
+        "start_date_local": "2026-11-07T12:00:00Z",
+        "distance": 8640,
+        "moving_time": 6180,
+        "elapsed_time": 6180,
+        "avg_hr": null,
+        "max_hr": null,
+        "elevation": null,
+        "polyline": null,
+        "splits": null,
+        "session_id": "none",
+        "ignored": false,
+        "updated_at": "2026-11-09T13:31:31.01127+00:00",
+        "rpe": 2,
+        "note": null,
+        "source": "manual"
+    }
+]

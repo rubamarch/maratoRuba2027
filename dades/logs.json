@@ -1,1 +1,38 @@
-[]
+[
+    {
+        "session_id": "w1-mon",
+        "done": true,
+        "km": 5.86,
+        "min": 31.51,
+        "rpe": 5,
+        "note": null,
+        "updated_at": "2026-11-09T13:28:42.618+00:00"
+    },
+    {
+        "session_id": "w1-wed",
+        "done": true,
+        "km": 6.26,
+        "min": 31.19,
+        "rpe": 8,
+        "note": null,
+        "updated_at": "2026-11-09T13:29:17.295+00:00"
+    },
+    {
+        "session_id": "w1-sat",
+        "done": true,
+        "km": 6,
+        "min": 40,
+        "rpe": 5,
+        "note": null,
+        "updated_at": "2026-11-09T13:30:40.03+00:00"
+    },
+    {
+        "session_id": "w2-mon",
+        "done": true,
+        "km": 6.08,
+        "min": 38.12,
+        "rpe": 3,
+        "note": null,
+        "updated_at": "2026-11-09T21:09:14.916+00:00"
+    }
+]
