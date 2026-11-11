@@ -492,3 +492,17 @@ input[name="km"] { font-family: var(--f-mono); font-size: 16px; }
 .kpis { display: flex; flex-wrap: wrap; }
 .kpis div { flex: 1 1 auto; min-width: 88px; }
 .kpis b { white-space: nowrap; }
+
+/* Predicció i guia de tests */
+.predbox { display: flex; flex-direction: column; gap: 4px; }
+.predbox .pred b { font-size: 48px; }
+.eqbox { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
+.minipaces { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.minipaces > span { grid-column: 1 / -1; font: 700 11px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.minipaces div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.minipaces b { font: 700 12px var(--f-body); color: var(--muted); }
+.minipaces i { font-style: normal; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.guide-grid div { padding: 12px 14px; border-radius: 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 4px; }
+.guide-grid b { font-family: var(--f-disp); font-size: 15px; }
+.guide-grid p { font-size: 14px; color: var(--ink-2); }

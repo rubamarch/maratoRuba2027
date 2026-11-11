@@ -277,7 +277,7 @@ function statsHtml() {
     <div class="stat"><span class="eyebrow">Sessions</span><span class="v num">${doneN}<small>/${act.length}</small></span><span class="s">Compliment ${past.length ? Math.round(past.filter(s => model.done(s.id)).length / past.length * 100) : 0} %</span></div>
     <div class="stat"><span class="eyebrow">Km</span><span class="v num">${Math.round(kmDone)}<small>/${Math.round(kmPlan)}</small></span><span class="s">del pla adaptat</span></div>
     <div class="stat"><span class="eyebrow">Setmana</span><span class="v num">${model.curWeek}<small>/25</small></span><span class="s">${phaseOf(model.curWeek).n}</span></div>
-    <div class="stat"><span class="eyebrow">Predicció</span><span class="v num">${f ? fmtH(f.pred) : '—'}</span><span class="s">${f ? `objectiu ${fmtH(data.settings.goal_pace * 42.195)}` : 'afegeix un test'}</span></div>
+    <div class="stat"><span class="eyebrow">Projecció cursa</span><span class="v num">${f ? hm(projection(f).mid) : '—'}</span><span class="s">${f ? `rang ${hm(projection(f).fast)}–${hm(projection(f).slow)} · objectiu ${hm(data.settings.goal_pace * 42.195)}` : 'afegeix un test'}</span></div>
   </div>`;
 }
 
@@ -429,10 +429,29 @@ function renderProgres() {
     </div>`;
 }
 
+// ---------- Predicció: equivalent d'avui i projecció al dia de la cursa ----------
+// L'equivalent d'avui (Riegel) diu què faries avui en una marató amb la forma del test.
+// La projecció suma la millora esperada si completes el pla: fins a un 0,4 % per setmana que queda (màx. 10 %),
+// amb un rang conservador (la meitat) i un d'optimista. Com més a prop de la cursa sigui el test, més estret el rang.
+const hm = x => { const m = Math.round(x / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+function projection(f) {
+  if (!f) return null;
+  const wl = Math.max(0, (plan.race - fromIso(String(f.test.date).slice(0, 10))) / DAY / 7);
+  const hi = Math.min(0.10, 0.004 * wl), lo = hi / 2;
+  return { fast: f.pred * (1 - hi), slow: f.pred * (1 - lo), mid: f.pred * (1 - (hi + lo) / 2), weeks: Math.round(wl) };
+}
+function predPill(pr) {
+  const goalT = data.settings.goal_pace * 42.195, maxT = 330 * 42.195;
+  if (!pr) return '';
+  return pr.slow <= goalT ? '<span class="chip green">En objectiu</span>'
+    : pr.fast <= goalT ? '<span class="chip green">Objectiu assolible</span>'
+    : pr.fast <= maxT ? '<span class="chip warn">Dins del teu màxim (5:30/km)</span>'
+    : '<span class="chip orange">Encara més lent que 5:30/km</span>';
+}
+
 // ---------- Vista: Tests ----------
 function renderTests() {
-  const f = fitness(data.tests); const goalT = data.settings.goal_pace * 42.195, maxT = 330 * 42.195;
-  const pill = f ? (f.pred <= goalT ? '<span class="chip green">En objectiu</span>' : f.pred <= maxT ? '<span class="chip warn">Dins el màxim (5:30)</span>' : '<span class="chip orange">Per sobre de 5:30/km</span>') : '';
+  const f = fitness(data.tests); const pr = projection(f);
   const planned = plan.sessions.filter(s => s.type === 't' || s.type === 'r').sort((a, b) => model.date(a) - model.date(b));
   const tests = [...data.tests].sort((a, b) => String(b.date).localeCompare(String(a.date)));
   view.innerHTML = `
@@ -448,10 +467,18 @@ function renderTests() {
           <p class="small muted">Cada test recalcula els teus ritmes d'entrenament i la predicció.</p>` : '<p class="small muted">Inicia sessió per afegir tests.</p>'}
       </div>
       <div class="card"><span class="eyebrow">Predicció de marató</span>
-        <div class="pred"><b class="num">${f ? fmtH(f.pred) : '—'}</b>${pill}</div>
-        <p class="small muted">${f ? `A partir de ${esc(f.test.label || 'test')} (${km1(f.test.dist)} km en ${fmtH(f.test.secs)}, ${new Date(f.test.date).toLocaleDateString('ca-ES')}). Ritme previst ${fmt(f.pred / 42.195)}/km.${f.adj ? ' Com que fa més de 4 mesos, s\'hi sumen 12″/km.' : ''}` : 'Registra un test (5 km, 10 km o mitja) per veure la predicció i ajustar els ritmes.'}</p>
-        <p class="small">Objectiu ${fmt(data.settings.goal_pace)}/km → <b class="mono">${fmtH(goalT)}</b> · Màxim 5:30/km → <b class="mono">${fmtH(maxT)}</b></p>
-        <a class="small" href="#ritmes">Veure els ritmes →</a>
+        ${f ? `<div class="predbox">
+          <span class="small muted">Projecció per al ${catDate(plan.race)} si completes el pla</span>
+          <div class="pred"><b class="num">${hm(pr.fast)}–${hm(pr.slow)}</b>${predPill(pr)}</div>
+          <span class="small mono">${fmt(pr.fast / 42.195)}–${fmt(pr.slow / 42.195)}/km</span>
+        </div>
+        <div class="eqbox"><span><b>Equivalent avui:</b> <b class="mono">${fmtH(f.pred)}</b> <span class="muted">(${fmt(f.pred / 42.195)}/km)</span></span>
+          <span class="small muted">És el que faries si correguessis la marató avui, amb la forma del teu test de ${km1(f.test.dist)} km en ${fmtH(f.test.secs)} (${new Date(f.test.date).toLocaleDateString('ca-ES')}). La projecció hi afegeix la millora de les ${pr.weeks} setmanes d'entrenament que queden.${f.adj ? ' El test té més de 4 mesos: s\'hi sumen 12″/km de marge.' : ''}</span></div>`
+        : '<p class="small muted">Registra un test (5 km, 10 km o mitja) per veure la predicció i ajustar els ritmes.</p>'}
+        <p class="small">Objectiu ${fmt(data.settings.goal_pace)}/km → <b class="mono">${fmtH(data.settings.goal_pace * 42.195)}</b> · Màxim 5:30/km → <b class="mono">${fmtH(330 * 42.195)}</b></p>
+        <div class="minipaces"><span>Els teus ritmes ara</span>
+          <div><b>Suau</b><i class="mono">${Z.SU}</i></div><div><b>Llindar</b><i class="mono">${Z.UM}</i></div><div><b>Ritme 10K</b><i class="mono">${Z.IN}</i></div><div><b>Ritme marató</b><i class="mono">${Z.RMO}</i></div>
+        </div>
       </div>
     </div>
     <div class="grid2">
@@ -459,8 +486,18 @@ function renderTests() {
         <div class="list">${tests.map(t => `<div class="li"><span><b class="mono">${fmtH(t.secs)}</b> · ${esc(t.label || 'Test')} <span class="muted small">${km1(t.dist)} km · ${fmt(t.secs / t.dist)}/km · ${new Date(t.date).toLocaleDateString('ca-ES')}</span></span>${canWrite() ? `<button class="btn sm ghost" data-deltest="${t.id}">Esborrar</button>` : '<span></span>'}</div>`).join('') || '<p class="muted small">Encara no hi ha tests.</p>'}</div>
       </div>
       <div class="card"><span class="eyebrow">Tests i curses del pla</span>
+        <p class="small muted">Fes-los quan toquen i apunta el temps aquí: així els ritmes s'ajusten a la teva forma real.</p>
         <div class="list">${planned.map(s => `<div class="li"><span><span class="dot t-${s.type}"></span> <b>${esc(model.title(s))}</b><br><span class="muted small">S${s.week} · ${dateLabel(model.date(s))}</span></span><span class="mono">${model.done(s.id) ? '<span class="ok">✓</span>' : '·'}</span></div>`).join('')}</div>
       </div>
+    </div>
+    <div class="card guide"><span class="eyebrow">Com funcionen els tests</span>
+      <div class="guide-grid">
+        <div><b>1 · Què és</b><p>Una prova al màxim que puguis sostenir (5 km, 10 km o una mitja). Mesura la teva forma d'avui.</p></div>
+        <div><b>2 · Com fer-lo</b><p>Escalfa 10–15′ amb 3–4 rectes. Recorregut pla, ritme constant de principi a final, sense sortir massa ràpid. Apunta el temps net.</p></div>
+        <div><b>3 · Què canvia</b><p>Recalcula els teus ritmes (suau, llindar, 10K) i la predicció. Totes les sessions mostren els ritmes nous a l'instant.</p></div>
+        <div><b>4 · Com llegir la predicció</b><p><b>Equivalent avui</b>: el que faries ara mateix en una marató. <b>Projecció</b>: el rang esperat el dia de la cursa si completes el pla. Cada test nou l'afina.</p></div>
+      </div>
+      <p class="small muted">Un test de 5 km sol ser optimista per a la marató si encara no tens la resistència feta: per això el pla també té un test de 10 km (S12) i la Mitja de Barcelona (S15), que són més fiables.</p>
     </div>`;
 }
 
