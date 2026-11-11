@@ -1,8 +1,8 @@
 // Service worker: app instal·lable, funciona sense cobertura i rep notificacions push.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL = `marato27-shell-${VERSION}`;
 const RUNTIME = 'marato27-runtime';
-const FILES = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/config.js',
+const FILES = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/config.js', 'js/sessio.js',
   'js/shared/plan.js', 'js/shared/pace.js', 'js/shared/adapt.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });

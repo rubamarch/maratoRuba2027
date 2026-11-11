@@ -4,6 +4,7 @@ import * as store from './store.js';
 import { buildPlan, iso, fromIso, addDays, catDate, DAY, DAYS, DAYS_L, TYPES, isRun, SLOT_ORDER, phaseOf, fdsOn, weekOfDate } from './shared/plan.js';
 import { zones, fillPaces, fitness, fmt, fmtH } from './shared/pace.js';
 import { computeModel, modelSessionsOn, isRunAct } from './shared/adapt.js';
+import { buildFitxa } from './sessio.js';
 
 // ---------- Estat ----------
 let data = store.cached();
@@ -133,6 +134,22 @@ function assignSelect(a, week) {
     </select></label>`;
 }
 
+// ---------- Fitxa de la sessió ----------
+function fitxaHtml(s, compact = false) {
+  const f = buildFitxa(s, model.km(s), model.title(s), data.tests, data.settings.goal_pace || 300);
+  const kp = f.kpis.length ? `<div class="kpis">${f.kpis.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : '';
+  const st = f.blocks.length ? `<ol class="struct">${f.blocks.map(b => `<li class="${b.main ? 'is-main' : ''}" style="--zc:var(--t-${b.zone ? b.zone.c : 'o'})">
+      <span class="ph">${b.ph}</span><span class="bt">${fill(esc(b.txt).replace(/\{(SU|UM|IN|RMO)\}/g, m => m))}</span>
+      ${b.zone ? `<span class="bz"><b>${b.zone.z}</b>${b.pace ? ` · ${b.pace}` : ''}</span>` : ''}</li>`).join('')}</ol>` : '';
+  if (compact) return `<div class="fitxa compact">${kp}${st || `<div class="detail">${fill(s.detail)}</div>`}</div>`;
+  return `<div class="fitxa">
+    ${kp}
+    ${f.objective ? `<p class="obj"><span>Objectiu</span>${esc(f.objective)}</p>` : ''}
+    ${st ? `<div class="sec"><span class="eyebrow">Estructura</span>${st}</div>` : `<div class="sec"><span class="eyebrow">${s.type === 'g' ? 'Exercicis' : 'Sessió'}</span><div class="detail">${fill(s.detail)}</div></div>`}
+    ${f.tips.length ? `<div class="sec"><span class="eyebrow">Consells</span><ul class="tips">${f.tips.map(t => `<li>${fill(esc(t))}</li>`).join('')}</ul></div>` : ''}
+  </div>`;
+}
+
 function sessCard(s) {
   const d = model.date(s); const t = TYPES[s.type]; const run = isRun(s.type);
   const log = data.logs[s.id] || {}; const acts = model.match[s.id] || [];
@@ -160,7 +177,7 @@ function sessCard(s) {
       </div>
     </div>
     <div class="sess-b">
-      <div class="detail">${fill(s.detail)}</div>
+      ${fitxaHtml(s)}
       ${notes.length ? `<div class="adj">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
       ${acts.map(a => actBlock(a, s)).join('')}
       ${(logBits || log.note) && !canWrite() ? `<p class="small muted">${esc(logBits)}${log.note ? ` · «${esc(log.note)}»` : ''}</p>` : ''}
@@ -231,19 +248,22 @@ function addBlock(date) {
 
 // ---------- Vista: Avui ----------
 function trackSvg() {
-  const W = 340, x0 = 8, x1 = 332, y = 26; const X = w => x0 + (x1 - x0) * (w - 1) / 25;
-  const frac = Math.min(25, Math.max(0, (today0() - plan.start) / DAY / 7));
-  let s = `<svg class="track" viewBox="0 0 ${W} 58" role="img" aria-label="Progrés del pla: setmana ${model.curWeek} de 25">`;
-  s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="rgb(255 255 255 / .18)" stroke-width="6" stroke-linecap="round"/>`;
-  for (let w = 1; w <= 25; w++) {
-    const ss = plan.sessions.filter(x => x.week === w && model.active(x)); const f = ss.length ? ss.filter(x => model.done(x.id)).length / ss.length : 0;
-    if (f > 0) s += `<line x1="${X(w)}" y1="${y}" x2="${X(w) + (X(w + 1) - X(w)) * f}" y2="${y}" stroke="#34e29b" stroke-width="6"/>`;
-  }
-  plan.phases.forEach((p, i) => { const xx = X(p.w[0]); s += `<circle cx="${xx}" cy="${y}" r="4.5" fill="#0d0f14" stroke="#fff" stroke-width="2"/><text x="${xx}" y="${y + 22}" font-size="9.5" fill="rgb(255 255 255 / .7)" text-anchor="${i === 0 ? 'start' : 'middle'}">${p.n.split(' ')[0].toUpperCase()}</text>`; });
-  s += `<rect x="${x1 - 6}" y="${y - 6}" width="12" height="12" fill="#ff5a4a" transform="rotate(45 ${x1} ${y})"/>`;
-  const tx = x0 + (x1 - x0) * frac / 25;
-  s += `<line x1="${tx}" y1="${y - 14}" x2="${tx}" y2="${y + 4}" stroke="#ff5a4a" stroke-width="2.5"/><circle cx="${tx}" cy="${y - 14}" r="4" fill="#ff5a4a"/>`;
-  return s + '</svg>';
+  const cw = model.curWeek; const t = today0();
+  const frac = w => { const ss = plan.sessions.filter(x => x.week === w && model.active(x)); return ss.length ? ss.filter(x => model.done(x.id)).length / ss.length : 0; };
+  const pct = Math.round(Math.min(1, Math.max(0, (t - plan.start) / (plan.race - plan.start))) * 100);
+  const all = plan.sessions.filter(x => model.active(x) && model.date(x) < t);
+  const comp = all.length ? Math.round(all.filter(x => model.done(x.id)).length / all.length * 100) : 0;
+  const ph = phaseOf(cw);
+  const cells = p => { let h = ''; for (let w = p.w[0]; w <= p.w[1]; w++) { const f = frac(w); h += `<i class="c ${w < cw ? 'past' : w === cw ? 'cur' : ''}" style="--f:${f.toFixed(2)}" title="Setmana ${w}: ${Math.round(f * 100)} % fet"></i>`; } return h; };
+  return `<div class="prog" role="img" aria-label="Setmana ${cw} de 25, fase ${esc(ph.n)}, ${pct} % del camí">
+    <div class="prog-top"><span><b>Setmana ${cw}</b><span class="dim"> / 25 · ${esc(ph.n)}</span></span><span><b>${pct} %</b><span class="dim"> del camí · ${comp} % compliment</span></span></div>
+    <div class="prog-bar">
+      ${plan.phases.map(p => `<div class="pg ${cw >= p.w[0] && cw <= p.w[1] ? 'on' : ''} ${cw > p.w[1] ? 'done' : ''}" style="flex:${p.w[1] - p.w[0] + 1}">
+        <div class="cells">${cells(p)}</div>
+        <div class="pg-l"><b>${esc(p.n)}</b><small>S${p.w[0]}–${p.w[1]}</small></div></div>`).join('')}
+      <div class="goal" title="Girona · ${catDate(plan.race)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4h1.5v1H19l-2.5 4.5L19 14H6.5v7z" fill="currentColor"/></svg></div>
+    </div>
+  </div>`;
 }
 
 function statsHtml() {
@@ -350,7 +370,7 @@ function weekRow(w) {
     <span><span class="small"><b>${dShort(plan.dateOf(w.n, 0))}</b> · ${ph.n}</span><br><span class="muted small">${km1(info.planned)} km${long ? ` · ${long.type === 'r' ? 'cursa' : 'llarga'} ${km1(model.km(long))}` : ''}${Math.abs(info.factor - 1) > 0.001 ? ' · ↻ ajustada' : ''}${cur ? ' · <b class="cur-tag">aquesta setmana</b>' : ''}</span></span>
     <span class="kmbar" title="${Math.round(f * 100)} % fet"><i style="width:${f * 100}%"></i></span></summary>
     <div class="wkbody">${w.note ? `<p class="small muted">${esc(w.note)}</p>` : ''}
-    ${ss.map(s => `<div class="wkline"><b class="mono small">${DAYS[(model.date(s).getDay() + 6) % 7]}</b><span class="dot t-${s.type}"></span><span>${esc(model.title(s))}${isRun(s.type) && s.km ? ` <span class="muted small">${km1(model.km(s))} km</span>` : ''}</span><span class="mono">${mark(s)}</span></div>`).join('')}
+    ${ss.map(s => `<details class="wkd"><summary class="wkline"><b class="mono small">${DAYS[(model.date(s).getDay() + 6) % 7]}</b><span class="dot t-${s.type}"></span><span>${esc(model.title(s))}${isRun(s.type) && s.km ? ` <span class="muted small">${km1(model.km(s))} km</span>` : ''}</span><span class="mono">${mark(s)}</span></summary>${fitxaHtml(s, true)}</details>`).join('')}
     <button class="btn sm" style="align-self:flex-start;margin-top:6px" data-go="${w.n}">Obrir setmana</button></div></details>`;
 }
 function renderPla() {
