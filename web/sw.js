@@ -1,5 +1,5 @@
 // Service worker: app instal·lable, funciona sense cobertura i rep notificacions push.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL = `marato27-shell-${VERSION}`;
 const RUNTIME = 'marato27-runtime';
 const FILES = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/config.js',

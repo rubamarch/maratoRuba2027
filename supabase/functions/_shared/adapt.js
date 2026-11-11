@@ -76,7 +76,8 @@ export function computeModel(plan, data, todayIso) {
   const history = [];                   // registre d'ajustos
   const weekInfo = {};
 
-  const isDoneBy = (id, match) => !!(data.logs[id] && data.logs[id].done) || !!(match[id] && match[id].length);
+  const isSkipped = id => !!(data.logs[id] && data.logs[id].skipped);   // l'has marcat amb la creu: no feta
+  const isDoneBy = (id, match) => !isSkipped(id) && (!!(data.logs[id] && data.logs[id].done) || !!(match[id] && match[id].length));
   const sDate = s => effDate(plan, s, moves, data.weeks);
 
   // ---- 1a assignació, per saber què s'ha fet ----
@@ -87,7 +88,7 @@ export function computeModel(plan, data, todayIso) {
     const w = curWeek; const sunday = plan.dateOf(w, 6);
     const wk = plan.sessions.filter(s => s.week === w && isActive(s, data.weeks));
     const runDays = () => new Set(wk.filter(s => isRun(s.type) && !auto[s.id]?.dropped && !auto[s.id]?.lost).map(s => iso(sDate(s))));
-    const missed = wk.filter(s => isRun(s.type) && s.type !== 'r' && sDate(s) < today && !isDoneBy(s.id, match));
+    const missed = wk.filter(s => isRun(s.type) && s.type !== 'r' && (sDate(s) < today || isSkipped(s.id)) && !isDoneBy(s.id, match));
     // primer la tirada llarga, després test i qualitat
     missed.sort((a, b) => ['l', 't', 'q', 'e'].indexOf(a.type) - ['l', 't', 'q', 'e'].indexOf(b.type));
     for (const s of missed) {
@@ -96,7 +97,8 @@ export function computeModel(plan, data, todayIso) {
       const taken = runDays();
       const longS = wk.find(x => x.type === 'l' && x.id !== s.id && !auto[x.id]?.lost);
       const longD = longS ? iso(sDate(longS)) : null;
-      const days = []; for (let d = new Date(today); d <= sunday; d = addDays(d, 1)) days.push(new Date(d));
+      const first = from >= today ? addDays(from, 1) : today;   // si la marques no feta avui o abans d'hora, busquem a partir de l'endemà
+      const days = []; for (let d = new Date(first); d <= sunday; d = addDays(d, 1)) days.push(new Date(d));
       let target = null, replaced = null;
       if (s.type === 'l') {
         const free = days.filter(d => !taken.has(iso(d)));

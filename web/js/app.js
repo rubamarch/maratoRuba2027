@@ -30,8 +30,8 @@ const numIn = v => { if (v === null || v === undefined) return null; const t = S
 const timeFields = (secs, req = false) => {
   const m = secs ? Math.floor(Math.round(secs) / 60) : '', sx = secs ? Math.round(secs) % 60 : '';
   return `<div class="f timef"><span>Temps</span><div class="timebox">
-    <label><input name="tmin" inputmode="numeric" pattern="[0-9]*" value="${m}" placeholder="min" aria-label="Minuts" ${req ? 'required' : ''}><span>min</span></label>
-    <label><input name="tsec" inputmode="numeric" pattern="[0-9]*" value="${sx === '' ? '' : String(sx).padStart(2, '0')}" placeholder="seg" aria-label="Segons" maxlength="2"><span>seg</span></label>
+    <label><input name="tmin" inputmode="numeric" pattern="[0-9]*" value="${m}" placeholder="0" aria-label="Minuts" ${req ? 'required' : ''}><span>min</span></label>
+    <label><input name="tsec" inputmode="numeric" pattern="[0-9]*" value="${sx === '' ? '' : String(sx).padStart(2, '0')}" placeholder="00" aria-label="Segons" maxlength="2"><span>seg</span></label>
   </div></div>`;
 };
 const readTime = fd => { const m = numIn(fd.get('tmin')) || 0, sx = numIn(fd.get('tsec')) || 0; if (sx >= 60 || m < 0 || sx < 0) return NaN; const t = Math.round(m * 60 + sx); return t || null; };
@@ -80,6 +80,7 @@ async function refresh() {
 
 // ---------- Sessions ----------
 const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7"/></svg>';
+const ICON_X = '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></svg>';
 
 function dateLabel(d) {
   const t = today0(); const diff = Math.round((d - t) / DAY);
@@ -136,6 +137,7 @@ function sessCard(s) {
   const d = model.date(s); const t = TYPES[s.type]; const run = isRun(s.type);
   const log = data.logs[s.id] || {}; const acts = model.match[s.id] || [];
   const done = model.done(s.id); const auto = model.auto[s.id] || {}; const adj = model.adj[s.id];
+  const skipped = !!log.skipped; const skipShown = skipped && !auto.moved;   // recol·locada: ja no es mostra com a no feta
   const isToday = iso(d) === todayIso();
   const kmNow = model.km(s); const kmChanged = run && kmNow !== s.km;
   const manualMove = data.moves[s.id];
@@ -144,14 +146,18 @@ function sessCard(s) {
   if (manualMove) notes.push(`Moguda per tu (era el ${DAYS_L[s.d]} ${dm(s.baseDate)}).`);
   const logBits = [log.km != null && log.km !== '' ? `${km1(log.km)} km` : '', log.min ? fmtH(log.min * 60) : '', log.rpe ? `esforç ${log.rpe}/10` : ''].filter(Boolean).join(' · ');
   const dayOpts = []; for (let i = 0; i < 7; i++) { const x = plan.dateOf(s.week, i); dayOpts.push(`<button type="button" data-mv="${s.id}" data-date="${iso(x)}" aria-pressed="${iso(x) === iso(d)}">${DAYS[i]} ${x.getDate()}</button>`); }
-  return `<article class="sess t-${s.type} ${isToday ? 'today' : ''} ${done ? 'is-done' : ''} ${auto.lost || auto.dropped ? 'lost' : ''}" id="s-${s.id}">
+  return `<article class="sess t-${s.type} ${isToday ? 'today' : ''} ${done ? 'is-done' : ''} ${skipShown ? 'is-skipped' : ''} ${auto.lost || auto.dropped ? 'lost' : ''}" id="s-${s.id}">
     <div class="sess-h">
       <div>
-        <div class="sess-meta"><span class="tchip">${t.n}</span><span>${dateLabel(d)}</span>${auto.moved ? '<span class="chip warn">recol·locada</span>' : ''}${auto.lost ? '<span class="chip">perduda</span>' : ''}${adj?.soft ? '<span class="chip warn">suavitzada</span>' : ''}</div>
+        <div class="sess-meta"><span class="tchip">${t.n}</span><span>${dateLabel(d)}</span>${auto.moved ? '<span class="chip warn">recol·locada</span>' : ''}${skipShown ? '<span class="chip bad">✕ no feta</span>' : auto.lost ? '<span class="chip">perduda</span>' : ''}${adj?.soft ? '<span class="chip warn">suavitzada</span>' : ''}</div>
         <div class="sess-title"><h3>${esc(model.title(s))}</h3>${run && s.km ? `<span class="mono small">${kmChanged ? `<s>${km1(s.km)}</s> ` : ''}${km1(kmNow)} km</span>` : ''}</div>
       </div>
-      <button type="button" class="check ${canWrite() ? '' : 'ro'}" data-done="${s.id}" aria-pressed="${done}" ${!canWrite() || byAct ? 'disabled' : ''}
-        aria-label="${done ? 'Feta' : 'Marcar com a feta'}" title="${byAct ? 'Registrada' : done ? 'Feta' : 'Marcar com a feta'}">${ICON_CHECK}</button>
+      <div class="marks">
+        <button type="button" class="xmark ${canWrite() ? '' : 'ro'}" data-skip="${s.id}" aria-pressed="${skipped}" ${!canWrite() ? 'disabled' : ''}
+          aria-label="${skipped ? 'Marcada com a no feta' : 'Marcar com a no feta'}" title="${skipped ? 'No feta (toca per desfer)' : 'No l\'he fet'}">${ICON_X}</button>
+        <button type="button" class="check ${canWrite() ? '' : 'ro'}" data-done="${s.id}" aria-pressed="${done}" ${!canWrite() || (byAct && !skipped) ? 'disabled' : ''}
+          aria-label="${done ? 'Feta' : 'Marcar com a feta'}" title="${byAct ? 'Registrada' : done ? 'Feta' : 'Marcar com a feta'}">${ICON_CHECK}</button>
+      </div>
     </div>
     <div class="sess-b">
       <div class="detail">${fill(s.detail)}</div>
@@ -265,7 +271,7 @@ function renderAvui() {
   const extrasToday = model.extras.filter(a => actDate(a) === todayIso());
   const recent = [...model.history].filter(h => h.week >= model.curWeek - 1).slice(-3);
   const before = t < plan.start;
-  view.innerHTML = `
+  view.innerHTML = `<div class="lay-avui">
     <section class="hero">
       <div class="hero-top">
         <div class="countdown"><b class="num">${daysLeft}</b><span>dies per a Girona<br><span class="mono small">${catDate(plan.race)} ${plan.race.getFullYear()}</span></span></div>
@@ -273,16 +279,18 @@ function renderAvui() {
       </div>
       ${trackSvg()}
     </section>
-    ${store.demo ? '' : ''}
+    <div class="a-main">
     <div class="row between"><h2>Avui</h2><span class="muted small">${DAYS_L[(t.getDay() + 6) % 7]} ${catDate(t)}</span></div>
     ${todayS.length ? todayS.map(sessCard).join('') : `<div class="rest"><b>Descans</b><span>${next ? `Següent: ${next.ss.map(s => esc(model.title(s))).join(' + ')} · ${dateLabel(next.d)}` : 'Gaudeix-ne.'}</span></div>`}
     ${extrasToday.map(extraCard).join('')}
     ${addBlock(todayIso())}
+    </div>
+    <div class="a-side">
     ${todayS.length && tomorrow.length ? `<div class="card tight"><span class="eyebrow">Demà</span>${tomorrow.map(s => `<div class="row"><span class="dot t-${s.type}"></span><b>${esc(model.title(s))}</b><span class="muted small">${TYPES[s.type].n}${isRun(s.type) && model.km(s) ? ' · ' + km1(model.km(s)) + ' km' : ''}</span></div>`).join('')}</div>` : ''}
     ${fdsBox(W)}
     ${statsHtml()}
     ${recent.length ? `<div class="card"><div class="row between"><span class="eyebrow">Últims ajustos del pla</span><a class="small" href="#progres">Tots</a></div><div class="hist">${recent.map(histRow).join('')}</div></div>` : ''}
-  `;
+    </div></div>`;
 }
 
 function fdsBox(W) {
@@ -305,10 +313,10 @@ function renderSetmana() {
     const lostHere = plan.sessions.filter(s => s.week === W.n && (model.auto[s.id]?.lost || model.auto[s.id]?.dropped) && iso(model.date(s)) === iso(d));
     const ex = model.extras.filter(a => actDate(a) === iso(d));
     const isT = iso(d) === todayIso();
-    days += `<div class="dayhead ${isT ? 'today' : ''}"><b>${DAYS_L[i]}</b><span class="muted small mono">${dm(d)}${isT ? ' · avui' : ''}</span></div>`;
+    days += `<div class="day ${isT ? 'is-today' : ''}"><div class="dayhead ${isT ? 'today' : ''}"><b>${DAYS_L[i]}</b><span class="muted small mono">${dm(d)}${isT ? ' · avui' : ''}</span></div>`;
     const all = [...ss, ...lostHere.filter(x => !ss.includes(x))];
     days += all.length || ex.length ? all.map(sessCard).join('') + ex.map(extraCard).join('') : (addOpen === iso(d) ? '' : `<div class="rest"><span>Descans</span></div>`);
-    days += addBlock(iso(d));
+    days += addBlock(iso(d)) + '</div>';
   }
   const hist = model.history.filter(h => h.week === W.n);
   const pct = info.planned ? Math.min(100, info.actual / info.planned * 100) : 0;
@@ -317,6 +325,7 @@ function renderSetmana() {
       <div><span class="chip green">Fase ${ph.id} · ${ph.n}</span><h1 style="margin-top:6px">Setmana ${W.n}</h1><span class="muted mono small">${dShort(s0)} – ${dShort(s6)}</span></div>
       <div class="weeknav"><button class="btn sm" data-wk="-1" ${W.n <= 1 ? 'disabled' : ''} aria-label="Setmana anterior">←</button><button class="btn sm" data-wk="0">Avui</button><button class="btn sm" data-wk="1" ${W.n >= 25 ? 'disabled' : ''} aria-label="Setmana següent">→</button></div>
     </div>
+    <div class="lay-week"><aside class="w-side">
     <div class="card tight">
       <div class="row between"><span class="eyebrow">Km de la setmana</span><span class="mono small"><b>${km1(info.actual)}</b> / ${km1(info.planned)} km${Math.abs(info.factor - 1) > 0.001 ? ` · <span class="chip warn">volum ${Math.round(info.factor * 100)} %</span>` : ''}</span></div>
       <div class="kmbar"><i style="width:${pct}%"></i></div>
@@ -324,27 +333,43 @@ function renderSetmana() {
     ${W.note ? `<div class="note">${esc(W.note)}</div>` : ''}
     ${hist.length ? `<div class="card tight"><span class="eyebrow">Ajustos automàtics</span><div class="hist">${hist.map(histRow).join('')}</div></div>` : ''}
     ${fdsBox(W)}
-    ${days}
-    <p class="small muted">Si et saltes una tirada llarga o una sessió de qualitat, el pla la recol·loca sola dins la setmana. Els rodatges suaus no es recuperen.</p>`;
+    <p class="small muted">Si et saltes (o marques amb ✕) una tirada llarga o una sessió de qualitat, el pla la recol·loca sola dins la setmana. Els rodatges suaus no es recuperen.</p>
+    </aside>
+    <div class="days">${days}</div></div>`;
 }
 
-// ---------- Vista: Pla ----------
+// ---------- Vista: Pla (per mesos) ----------
+const monthName = d => { const m = d.toLocaleDateString('ca-ES', { month: 'long' }); return m.charAt(0).toUpperCase() + m.slice(1) + ' ' + d.getFullYear(); };
+function weekRow(w) {
+  const ss = plan.sessions.filter(s => s.week === w.n && model.active(s)).sort((a, b) => model.date(a) - model.date(b) || SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot));
+  const f = ss.length ? ss.filter(s => model.done(s.id)).length / ss.length : 0;
+  const info = model.weekInfo[w.n]; const long = ss.find(s => s.type === 'l' || s.type === 'r');
+  const cur = w.n === model.curWeek; const ph = phaseOf(w.n);
+  const mark = s => model.done(s.id) ? '<span class="ok">✓</span>' : (data.logs[s.id]?.skipped || model.auto[s.id]?.lost) ? '<span class="ko">✕</span>' : '<span class="muted">·</span>';
+  return `<details class="wk ${cur ? 'cur' : ''}" ${cur ? 'open' : ''}><summary><b class="mono">S${w.n}</b>
+    <span><span class="small"><b>${dShort(plan.dateOf(w.n, 0))}</b> · ${ph.n}</span><br><span class="muted small">${km1(info.planned)} km${long ? ` · ${long.type === 'r' ? 'cursa' : 'llarga'} ${km1(model.km(long))}` : ''}${Math.abs(info.factor - 1) > 0.001 ? ' · ↻ ajustada' : ''}${cur ? ' · <b class="cur-tag">aquesta setmana</b>' : ''}</span></span>
+    <span class="kmbar" title="${Math.round(f * 100)} % fet"><i style="width:${f * 100}%"></i></span></summary>
+    <div class="wkbody">${w.note ? `<p class="small muted">${esc(w.note)}</p>` : ''}
+    ${ss.map(s => `<div class="wkline"><b class="mono small">${DAYS[(model.date(s).getDay() + 6) % 7]}</b><span class="dot t-${s.type}"></span><span>${esc(model.title(s))}${isRun(s.type) && s.km ? ` <span class="muted small">${km1(model.km(s))} km</span>` : ''}</span><span class="mono">${mark(s)}</span></div>`).join('')}
+    <button class="btn sm" style="align-self:flex-start;margin-top:6px" data-go="${w.n}">Obrir setmana</button></div></details>`;
+}
 function renderPla() {
-  view.innerHTML = `<h1>Pla complet</h1>` + plan.phases.map(p => `<section class="phase">
-    <div class="row between"><h2>${p.id}. ${p.n}</h2><span class="muted mono small">S${p.w[0]}–${p.w[1]}</span></div>
-    <p class="muted">${esc(p.txt)}</p>
-    ${plan.weeks.filter(w => w.phase === p.id).map(w => {
-      const ss = plan.sessions.filter(s => s.week === w.n && model.active(s)).sort((a, b) => model.date(a) - model.date(b) || SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot));
-      const f = ss.length ? ss.filter(s => model.done(s.id)).length / ss.length : 0;
-      const info = model.weekInfo[w.n]; const long = ss.find(s => s.type === 'l' || s.type === 'r');
-      const cur = w.n === model.curWeek;
-      return `<details class="wk ${cur ? 'cur' : ''}" ${cur ? 'open' : ''}><summary><b class="mono">S${w.n}</b>
-        <span><span class="small">${dShort(plan.dateOf(w.n, 0))}</span> · <span class="muted small">${km1(info.planned)} km${long ? ` · ${long.type === 'r' ? 'cursa' : 'llarga'} ${km1(model.km(long))}` : ''}${Math.abs(info.factor - 1) > 0.001 ? ' · ↻' : ''}</span></span>
-        <span class="kmbar" title="${Math.round(f * 100)} % fet"><i style="width:${f * 100}%"></i></span></summary>
-        <div class="wkbody">${w.note ? `<p class="small muted">${esc(w.note)}</p>` : ''}
-        ${ss.map(s => `<div class="wkline"><b class="mono small">${DAYS[(model.date(s).getDay() + 6) % 7]}</b><span class="dot t-${s.type}"></span><span>${esc(model.title(s))}${isRun(s.type) && s.km ? ` <span class="muted small">${km1(model.km(s))} km</span>` : ''}</span><span class="mono">${model.done(s.id) ? '✓' : model.auto[s.id]?.lost ? '✕' : '·'}</span></div>`).join('')}
-        <button class="btn sm" style="align-self:flex-start;margin-top:6px" data-go="${w.n}">Obrir setmana</button></div></details>`;
-    }).join('')}</section>`).join('');
+  const months = [];
+  for (const w of plan.weeks) {
+    const key = plan.dateOf(w.n, 3); // el dijous decideix el mes de la setmana
+    const k = `${key.getFullYear()}-${key.getMonth()}`;
+    let m = months.find(x => x.k === k); if (!m) months.push(m = { k, d: key, weeks: [] });
+    m.weeks.push(w);
+  }
+  view.innerHTML = `<div class="row between"><h1>Pla complet</h1><span class="muted small">25 setmanes · ${catDate(plan.start)} → ${catDate(plan.race)}</span></div>
+    <div class="phasebar">${plan.phases.map(p => `<span class="ph ${model.curWeek >= p.w[0] && model.curWeek <= p.w[1] ? 'on' : ''}" title="${esc(p.txt)}"><b>${p.n}</b><small>S${p.w[0]}–${p.w[1]}</small></span>`).join('')}</div>
+    <div class="months">${months.map(m => {
+      const ss = plan.sessions.filter(s => m.weeks.some(w => w.n === s.week) && model.active(s));
+      const doneN = ss.filter(s => model.done(s.id)).length;
+      const km = m.weeks.reduce((a, w) => a + model.weekInfo[w.n].planned, 0);
+      return `<section class="month"><div class="month-h"><h2>${monthName(m.d)}</h2><span class="muted small mono">S${m.weeks[0].n}–${m.weeks[m.weeks.length - 1].n} · ${Math.round(km)} km · ${doneN}/${ss.length} fetes</span></div>
+        ${m.weeks.map(weekRow).join('')}</section>`;
+    }).join('')}</div>`;
 }
 
 // ---------- Vista: Progrés ----------
@@ -369,34 +394,54 @@ function chartSvg() {
 }
 
 function renderProgres() {
-  const f = fitness(data.tests); const goalT = data.settings.goal_pace * 42.195, maxT = 330 * 42.195;
-  const pill = f ? (f.pred <= goalT ? '<span class="chip green">En objectiu</span>' : f.pred <= maxT ? '<span class="chip warn">Dins el màxim (5:30)</span>' : '<span class="chip orange">Per sobre de 5:30/km</span>') : '';
   const acts = [...data.activities].filter(a => !a.ignored).sort((a, b) => String(b.start_date_local).localeCompare(String(a.start_date_local))).slice(0, 30);
   const where = a => { const id = Object.keys(model.match).find(k => model.match[k].some(x => x.id === a.id)); return id ? model.title(plan.byId[id]) : 'Dia extra'; };
   view.innerHTML = `
     <h1>Progrés</h1>
+    ${statsHtml()}
+    <div class="card"><span class="eyebrow">Km per setmana</span><div class="chartwrap">${chartSvg()}</div>
+      <div class="row small muted"><span><span class="dot" style="--tc:var(--primary);border-radius:2px"></span> Fets</span><span style="color:var(--accent)">- - Pla adaptat</span><span>··· Pla original</span></div></div>
     <div class="grid2">
-      <div class="card"><span class="eyebrow">Predicció de marató</span>
-        <div class="pred"><b class="num">${f ? fmtH(f.pred) : '—'}</b>${pill}</div>
-        <p class="small muted">${f ? `A partir de ${esc(f.test.label || 'test')} (${km1(f.test.dist)} km en ${fmtH(f.test.secs)}, ${new Date(f.test.date).toLocaleDateString('ca-ES')}). Ritme previst ${fmt(f.pred / 42.195)}/km.${f.adj ? ' Com que fa més de 4 mesos, s\'hi sumen 12″/km.' : ''}` : 'Registra un test (5 km, 10 km o mitja) per veure la predicció i ajustar els ritmes.'}</p>
-        <p class="small">Objectiu ${fmt(data.settings.goal_pace)}/km → <b class="mono">${fmtH(goalT)}</b> · Màxim 5:30/km → <b class="mono">${fmtH(maxT)}</b></p>
-      </div>
-      <div class="card"><span class="eyebrow">Tests i curses</span>
+    <div class="card"><span class="eyebrow">Historial d'ajustos ${model.adaptOn ? '' : '(adaptació desactivada)'}</span>
+      <div class="hist">${model.history.length ? [...model.history].sort((a, b) => b.week - a.week).map(histRow).join('') : '<p class="muted small">Encara cap ajust: el pla s\'adapta quan acaba cada setmana i quan et saltes o afegeixes sessions.</p>'}</div></div>
+    <div class="card"><span class="eyebrow">Activitats registrades</span>
+      <div class="list">${acts.length ? acts.map(a => `<div class="li"><span><b class="mono">${km1(actKm(a))} km</b> · ${esc(a.name || '')}<br><span class="muted small">${dShort(fromIso(actDate(a)))} · ${a.moving_time && actKm(a) ? fmt(a.moving_time / actKm(a)) + '/km' : ''} → ${esc(where(a))}</span></span>${canWrite() ? `<a class="btn sm ghost" href="#setmana/${weekOfDate(plan, fromIso(actDate(a)))}">Veure</a>` : '<span></span>'}</div>`).join('') : '<p class="muted small">Encara no hi ha activitats extra. Afegeix-ne amb "+ Afegir activitat" a qualsevol dia.</p>'}</div></div>
+    </div>`;
+}
+
+// ---------- Vista: Tests ----------
+function renderTests() {
+  const f = fitness(data.tests); const goalT = data.settings.goal_pace * 42.195, maxT = 330 * 42.195;
+  const pill = f ? (f.pred <= goalT ? '<span class="chip green">En objectiu</span>' : f.pred <= maxT ? '<span class="chip warn">Dins el màxim (5:30)</span>' : '<span class="chip orange">Per sobre de 5:30/km</span>') : '';
+  const planned = plan.sessions.filter(s => s.type === 't' || s.type === 'r').sort((a, b) => model.date(a) - model.date(b));
+  const tests = [...data.tests].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  view.innerHTML = `
+    <h1>Tests</h1>
+    <div class="grid2">
+      <div class="card"><span class="eyebrow">Afegir un test o una cursa</span>
         ${canWrite() ? `<form id="testForm" class="formgrid">
           <label class="f">Data<input type="date" name="date" required value="${todayIso()}"></label>
           <label class="f">Distància<select name="dist"><option value="5">5 km</option><option value="10">10 km</option><option value="21.0975">Mitja</option><option value="42.195">Marató</option></select></label>
           ${timeFields(null, true)}
-          <label class="f">Nom<input name="label" placeholder="Test 5 km" maxlength="80"></label>
-          <button class="btn primary sm wide" type="submit">Afegir test</button></form>` : ''}
-        <div class="list">${[...data.tests].sort((a, b) => String(b.date).localeCompare(String(a.date))).map(t => `<div class="li"><span><b class="mono">${fmtH(t.secs)}</b> · ${esc(t.label || 'Test')} <span class="muted small">${km1(t.dist)} km · ${new Date(t.date).toLocaleDateString('ca-ES')}</span></span>${canWrite() ? `<button class="btn sm ghost" data-deltest="${t.id}">Esborrar</button>` : '<span></span>'}</div>`).join('') || '<p class="muted small">Encara no hi ha tests.</p>'}</div>
+          <label class="f wide">Nom<input name="label" placeholder="Test 5 km" maxlength="80"></label>
+          <button class="btn primary wide" type="submit">Afegir test</button></form>
+          <p class="small muted">Cada test recalcula els teus ritmes d'entrenament i la predicció.</p>` : '<p class="small muted">Inicia sessió per afegir tests.</p>'}
+      </div>
+      <div class="card"><span class="eyebrow">Predicció de marató</span>
+        <div class="pred"><b class="num">${f ? fmtH(f.pred) : '—'}</b>${pill}</div>
+        <p class="small muted">${f ? `A partir de ${esc(f.test.label || 'test')} (${km1(f.test.dist)} km en ${fmtH(f.test.secs)}, ${new Date(f.test.date).toLocaleDateString('ca-ES')}). Ritme previst ${fmt(f.pred / 42.195)}/km.${f.adj ? ' Com que fa més de 4 mesos, s\'hi sumen 12″/km.' : ''}` : 'Registra un test (5 km, 10 km o mitja) per veure la predicció i ajustar els ritmes.'}</p>
+        <p class="small">Objectiu ${fmt(data.settings.goal_pace)}/km → <b class="mono">${fmtH(goalT)}</b> · Màxim 5:30/km → <b class="mono">${fmtH(maxT)}</b></p>
+        <a class="small" href="#ritmes">Veure els ritmes →</a>
       </div>
     </div>
-    <div class="card"><span class="eyebrow">Km per setmana</span><div class="chartwrap">${chartSvg()}</div>
-      <div class="row small muted"><span><span class="dot" style="--tc:var(--primary);border-radius:2px"></span> Fets</span><span style="color:var(--accent)">- - Pla adaptat</span><span>··· Pla original</span></div></div>
-    <div class="card"><span class="eyebrow">Historial d'ajustos ${model.adaptOn ? '' : '(adaptació desactivada)'}</span>
-      <div class="hist">${model.history.length ? [...model.history].sort((a, b) => b.week - a.week).map(histRow).join('') : '<p class="muted small">Encara cap ajust: el pla s\'adapta quan acaba cada setmana i quan et saltes o afegeixes sessions.</p>'}</div></div>
-    <div class="card"><span class="eyebrow">Activitats registrades</span>
-      <div class="list">${acts.length ? acts.map(a => `<div class="li"><span><b class="mono">${km1(actKm(a))} km</b> · ${esc(a.name || '')}<br><span class="muted small">${dShort(fromIso(actDate(a)))} · ${a.moving_time ? fmt(a.moving_time / actKm(a)) + '/km' : ''}${a.avg_hr ? ' · ' + Math.round(a.avg_hr) + ' ppm' : ''} → ${esc(where(a))}</span></span>${canWrite() ? `<a class="btn sm ghost" href="#setmana/${weekOfDate(plan, fromIso(actDate(a)))}">Veure</a>` : '<span></span>'}</div>`).join('') : '<p class="muted small">Encara no hi ha activitats. Afegeix-ne amb "+ Afegir activitat" a qualsevol dia.</p>'}</div></div>`;
+    <div class="grid2">
+      <div class="card"><span class="eyebrow">Els teus tests</span>
+        <div class="list">${tests.map(t => `<div class="li"><span><b class="mono">${fmtH(t.secs)}</b> · ${esc(t.label || 'Test')} <span class="muted small">${km1(t.dist)} km · ${fmt(t.secs / t.dist)}/km · ${new Date(t.date).toLocaleDateString('ca-ES')}</span></span>${canWrite() ? `<button class="btn sm ghost" data-deltest="${t.id}">Esborrar</button>` : '<span></span>'}</div>`).join('') || '<p class="muted small">Encara no hi ha tests.</p>'}</div>
+      </div>
+      <div class="card"><span class="eyebrow">Tests i curses del pla</span>
+        <div class="list">${planned.map(s => `<div class="li"><span><span class="dot t-${s.type}"></span> <b>${esc(model.title(s))}</b><br><span class="muted small">S${s.week} · ${dateLabel(model.date(s))}</span></span><span class="mono">${model.done(s.id) ? '<span class="ok">✓</span>' : '·'}</span></div>`).join('')}</div>
+      </div>
+    </div>`;
 }
 
 // ---------- Vista: Ritmes ----------
@@ -552,9 +597,15 @@ view.addEventListener('click', async e => {
   if (ds.go) { location.hash = 'setmana/' + ds.go; return; }
   if (ds.done) {
     const id = ds.done; const cur = data.logs[id] || {};
-    const row = { done: !cur.done, km: cur.km ?? null, min: cur.min ?? null, rpe: cur.rpe ?? null, note: cur.note ?? null };
+    const row = { done: !cur.done || !!cur.skipped, skipped: false, km: cur.km ?? null, min: cur.min ?? null, rpe: cur.rpe ?? null, note: cur.note ?? null };
     if (!row.done && row.km == null && row.min == null && row.rpe == null && !row.note) return act(() => store.saveLog(data, id, null), 'Desmarcada');
     return act(() => store.saveLog(data, id, row), row.done ? 'Feta ✓' : 'Desmarcada');
+  }
+  if (ds.skip) {
+    const id = ds.skip; const cur = data.logs[id] || {};
+    const row = { done: false, skipped: !cur.skipped, km: cur.km ?? null, min: cur.min ?? null, rpe: cur.rpe ?? null, note: cur.note ?? null };
+    if (!row.skipped && row.km == null && row.min == null && row.rpe == null && !row.note) return act(() => store.saveLog(data, id, null), 'Desmarcada');
+    return act(() => store.saveLog(data, id, row), row.skipped ? 'Marcada com a no feta ✕' : 'Desmarcada');
   }
   if (ds.add) { addOpen = addOpen === ds.add ? null : ds.add; render(); document.querySelector('#addForm [name=name]')?.focus(); return; }
   if (ds.addcancel) { addOpen = null; render(); return; }
@@ -619,7 +670,7 @@ view.addEventListener('submit', async e => {
     const km = numIn(fd.get('km')); const secs = readTime(fd);
     if (Number.isNaN(secs)) return toast('Els segons han d\'anar de 0 a 59');
     if (fd.get('km') && km == null) return toast('Escriu els km amb números (6,5 o 6.5)');
-    const row = { done: cur.done || !!(km || secs), km, min: secs ? Math.round(secs / 60 * 100) / 100 : null, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null };
+    const row = { done: (cur.done && !cur.skipped) || !!(km || secs), skipped: !!cur.skipped && !(km || secs), km, min: secs ? Math.round(secs / 60 * 100) / 100 : null, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null };
     return act(() => store.saveLog(data, id, row), 'Desat ✓');
   }
   if (f.id === 'addForm') {
@@ -676,7 +727,7 @@ view.addEventListener('change', e => {
 view.addEventListener('toggle', e => { const d = e.target; if (d.classList?.contains('actx') && d.open) drawMap(d.dataset.id); }, true);
 
 // ---------- Rutes ----------
-const TABS = ['avui', 'setmana', 'pla', 'progres', 'ritmes', 'ajustos'];
+const TABS = ['avui', 'setmana', 'pla', 'progres', 'tests', 'ritmes', 'ajustos'];
 function route() {
   const [r, arg] = location.hash.slice(1).split('/');
   if (r === 'dia' && arg) { viewWeek = weekOfDate(plan, fromIso(arg)); return { tab: 'setmana', focus: arg }; }
@@ -687,7 +738,8 @@ let lastTab = null;
 function render() {
   if (!plan) return;
   const { tab } = route();
-  ({ avui: renderAvui, setmana: renderSetmana, pla: renderPla, progres: renderProgres, ritmes: renderRitmes, ajustos: renderAjustos })[tab]();
+  view.className = 'view v-' + tab;
+  ({ avui: renderAvui, setmana: renderSetmana, pla: renderPla, progres: renderProgres, tests: renderTests, ritmes: renderRitmes, ajustos: renderAjustos })[tab]();
   document.querySelectorAll('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tab ? 'page' : 'false'));
   $('#brandSub').textContent = `S${model.curWeek}/25 · ${Math.max(0, Math.round((plan.race - today0()) / DAY))} dies`;
   const bn = $('#banner');

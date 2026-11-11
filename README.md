@@ -12,9 +12,10 @@ Interfaz en catalán, plan **adaptativo**, registro manual rápido, notificacion
 | Pantalla | Contenido |
 |---|---|
 | **Avui** | Cuenta atrás, línea de progreso por fases, sesiones de hoy, mañana, estadísticas y últimos ajustes |
-| **Setmana** | Los 7 días con cada sesión: detalle con ritmos, menú **Registrar** (km con coma o punto, minutos + segundos, esfuerzo, nota), menú **Moure** (otro día), pádel del sábado y **+ Afegir activitat** en cualquier día (también en descanso) |
-| **Pla** | Las 5 fases y 25 semanas con el volumen ya adaptado |
-| **Progrés** | Predicción de maratón (Riegel), tests, gráfica de km (hechos, plan adaptado y plan original), historial de ajustes y actividades registradas |
+| **Setmana** | Los 7 días con cada sesión: detalle con ritmos, menú **Registrar** (km con coma o punto, minutos + segundos, esfuerzo, nota), menú **Moure** (otro día), ✓ hecha / ✕ no hecha, pádel del sábado y **+ Afegir activitat** en cualquier día (también en descanso) |
+| **Pla** | Las 25 semanas agrupadas por meses, con la semana actual desplegada y el volumen ya adaptado |
+| **Progrés** | Estadísticas, gráfica de km (hechos, plan adaptado y plan original), historial de ajustes y actividades registradas |
+| **Tests** | Añadir tests (minutos + segundos), predicción de maratón (Riegel) y tests y carreras del plan |
 | **Ritmes** | Zonas de ritmo, reglas de adaptación y guía (pádel, hombro, seguridad) |
 | **Ajustos** | Login, fecha de la carrera, ritmo objetivo, adaptación on/off, copia de seguridad, notificaciones, calendario, compartir e instalar |
 
@@ -33,6 +34,9 @@ El motor (`supabase/functions/_shared/adapt.js`) recalcula el plan cada vez que 
 - **Día extra** (carrera fuera del plan): suma a los km de la semana. Si tienes calidad en los 2 días siguientes, esa sesión se suaviza.
 - **Afinamiento (semanas 23–25)**: nunca se le añade volumen. Los ritmos solo cambian con tests.
 - Los movimientos que haces tú mandan sobre los automáticos. La adaptación se puede desactivar en Ajustos.
+
+## Móvil y ordenador
+En el móvil, barra de pestañas flotante abajo. En pantallas de 1100 px o más: menú lateral, *Avui* en dos columnas, la semana en cuadrícula con el resumen fijo a la izquierda, el plan por meses en columnas y Ajustos en dos columnas.
 
 ## Estructura
 

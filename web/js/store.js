@@ -148,7 +148,7 @@ export async function importAll(d, j) {
     return persistDemo(d);
   }
   if (j.settings) { const { race_date, goal_pace, adapt } = j.settings; chk(await sb.from('settings').update({ race_date, goal_pace, adapt, updated_at: new Date().toISOString() }).eq('id', 1)); }
-  const lr = Object.entries(logs).map(([id, r]) => ({ session_id: id, done: !!r.done, km: r.km ?? null, min: r.min ?? null, rpe: r.rpe ?? null, note: r.note ?? null }));
+  const lr = Object.entries(logs).map(([id, r]) => ({ session_id: id, done: !!r.done, skipped: !!r.skipped, km: r.km ?? null, min: r.min ?? null, rpe: r.rpe ?? null, note: r.note ?? null }));
   if (lr.length) chk(await sb.from('logs').upsert(lr));
   const mr = Object.entries(moves).map(([id, date]) => ({ session_id: id, date }));
   if (mr.length) chk(await sb.from('moves').upsert(mr));
