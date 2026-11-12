@@ -58,5 +58,15 @@
         "note": null,
         "updated_at": "2026-11-11T10:57:10.025+00:00",
         "skipped": true
+    },
+    {
+        "session_id": "w2-wed",
+        "done": true,
+        "km": 4.8,
+        "min": 28.8,
+        "rpe": 5,
+        "note": "Mal a la rotula genoll esquerra. He parat.",
+        "updated_at": "2026-11-11T19:01:58.459+00:00",
+        "skipped": false
     }
 ]
