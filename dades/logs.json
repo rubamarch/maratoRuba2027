@@ -68,5 +68,35 @@
         "note": "Mal a la rotula genoll esquerra. He parat.",
         "updated_at": "2026-11-11T19:01:58.459+00:00",
         "skipped": false
+    },
+    {
+        "session_id": "w2-tue-gym",
+        "done": false,
+        "km": null,
+        "min": null,
+        "rpe": null,
+        "note": null,
+        "updated_at": "2026-11-13T12:41:14.034+00:00",
+        "skipped": true
+    },
+    {
+        "session_id": "w2-thu-gym",
+        "done": false,
+        "km": null,
+        "min": null,
+        "rpe": null,
+        "note": null,
+        "updated_at": "2026-11-13T12:41:20.489+00:00",
+        "skipped": true
+    },
+    {
+        "session_id": "w2-sat",
+        "done": true,
+        "km": 5.37,
+        "min": 27.33,
+        "rpe": 7,
+        "note": "Be, sense problemes.",
+        "updated_at": "2026-11-13T14:12:46.708+00:00",
+        "skipped": false
     }
 ]
