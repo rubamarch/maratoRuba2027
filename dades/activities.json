@@ -19,5 +19,26 @@
         "rpe": 2,
         "note": null,
         "source": "manual"
+    },
+    {
+        "id": -1794656699622,
+        "name": "Rodatge rapid",
+        "sport_type": "Run",
+        "start_date": "2026-11-14T11:00:00+00:00",
+        "start_date_local": "2026-11-14T12:00:00Z",
+        "distance": 6700,
+        "moving_time": 1948,
+        "elapsed_time": 1948,
+        "avg_hr": null,
+        "max_hr": null,
+        "elevation": null,
+        "polyline": null,
+        "splits": null,
+        "session_id": "none",
+        "ignored": false,
+        "updated_at": "2026-11-14T11:44:59.235912+00:00",
+        "rpe": 6,
+        "note": null,
+        "source": "manual"
     }
 ]
