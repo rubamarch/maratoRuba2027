@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import * as store from './store.js';
 import { buildPlan, iso, fromIso, addDays, catDate, DAY, DAYS, DAYS_L, TYPES, isRun, SLOT_ORDER, phaseOf, fdsOn, weekOfDate } from './shared/plan.js';
 import { zones, fillPaces, fitness, fmt, fmtH } from './shared/pace.js';
-import { computeModel, modelSessionsOn, isRunAct } from './shared/adapt.js';
+import { computeModel, modelSessionsOn, isRunAct, PAIN_RE } from './shared/adapt.js';
 import { buildFitxa } from './sessio.js';
 
 // ---------- Estat ----------
@@ -48,7 +48,7 @@ function recompute() {
 
 // ---------- UI comuna ----------
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms || (msg.length > 60 ? 6000 : 2600)); }
 function setSync(st, title) { const e = $('#sync'); e.className = 'sync ' + st; e.title = title || ''; }
 
 async function act(fn, okMsg) {
@@ -160,13 +160,18 @@ function sessCard(s) {
   const manualMove = data.moves[s.id];
   const byAct = acts.length > 0;
   const notes = [...(adj?.notes || [])];
+  const fastF = model.flags.fast[s.id]; const painF = log.note && PAIN_RE.test(log.note);
+  if (fastF) notes.unshift(`Rodatge massa ràpid: ${fastF.label}/km. El suau és ${fmt(model.flags.easy.suLow)}–${fmt(model.flags.easy.suHigh)}/km: més ràpid no hi guanyes base aeròbica i hi afegeixes impacte (genolls i tendons).`);
+  if (painF) notes.unshift(`Dolor anotat: «${log.note}». El pla es descarrega. Si persisteix o et fa canviar la gambada, para i consulta el fisio.`);
+  const fx = buildFitxa(s, model.km(s), model.title(s), data.tests, data.settings.goal_pace || 300);
+  const mini = fx.kpis.filter(([k]) => k === 'Durada' || k === 'Ritme' || k === 'Esforç').map(([, v]) => v).join(' · ');
   if (manualMove) notes.push(`Moguda per tu (era el ${DAYS_L[s.d]} ${dm(s.baseDate)}).`);
   const logBits = [log.km != null && log.km !== '' ? `${km1(log.km)} km` : '', log.min ? fmtH(log.min * 60) : '', log.rpe ? `esforç ${log.rpe}/10` : ''].filter(Boolean).join(' · ');
   const dayOpts = []; for (let i = 0; i < 7; i++) { const x = plan.dateOf(s.week, i); dayOpts.push(`<button type="button" data-mv="${s.id}" data-date="${iso(x)}" aria-pressed="${iso(x) === iso(d)}">${DAYS[i]} ${x.getDate()}</button>`); }
   return `<article class="sess t-${s.type} ${isToday ? 'today' : ''} ${done ? 'is-done' : ''} ${skipShown ? 'is-skipped' : ''} ${auto.lost || auto.dropped ? 'lost' : ''}" id="s-${s.id}">
     <div class="sess-h">
       <div>
-        <div class="sess-meta"><span class="tchip">${t.n}</span><span>${dateLabel(d)}</span>${auto.moved ? '<span class="chip warn">recol·locada</span>' : ''}${skipShown ? '<span class="chip bad">✕ no feta</span>' : auto.lost ? '<span class="chip">perduda</span>' : ''}${adj?.soft ? '<span class="chip warn">suavitzada</span>' : ''}</div>
+        <div class="sess-meta"><span class="tchip">${t.n}</span><span>${dateLabel(d)}</span>${auto.moved ? '<span class="chip warn">recol·locada</span>' : ''}${skipShown ? '<span class="chip bad">✕ no feta</span>' : auto.lost ? '<span class="chip">perduda</span>' : ''}${adj?.soft ? '<span class="chip warn">suavitzada</span>' : ''}${fastF ? `<span class="chip warn" title="Massa ràpid per a un suau">⚡ ${fastF.label}/km</span>` : ''}${painF ? '<span class="chip bad">🩹 dolor</span>' : ''}</div>
         <div class="sess-title"><h3>${esc(model.title(s))}</h3>${run && s.km ? `<span class="mono small">${kmChanged ? `<s>${km1(s.km)}</s> ` : ''}${km1(kmNow)} km</span>` : ''}</div>
       </div>
       <div class="marks">
@@ -177,11 +182,16 @@ function sessCard(s) {
       </div>
     </div>
     <div class="sess-b">
-      ${fitxaHtml(s)}
-      ${notes.length ? `<div class="adj">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
-      ${acts.map(a => actBlock(a, s)).join('')}
-      ${(logBits || log.note) && !canWrite() ? `<p class="small muted">${esc(logBits)}${log.note ? ` · «${esc(log.note)}»` : ''}</p>` : ''}
-      ${canWrite() ? `<div class="menus">
+      <div class="menus">
+      <details class="more menu dmenu"><summary><span>📋 Detall de la sessió</span>${mini ? `<span class="sum-mini mono">${esc(mini)}</span>` : ''}</summary>
+        <div class="subsec">
+          ${notes.length ? `<div class="adj">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
+          ${fitxaHtml(s)}
+          ${acts.map(a => actBlock(a, s)).join('')}
+          ${(logBits || log.note) && !canWrite() ? `<p class="small muted">Registre: ${esc(logBits)}${log.note ? ` · «${esc(log.note)}»` : ''}</p>` : ''}
+        </div>
+      </details>
+      ${canWrite() ? `
       <details class="more menu"><summary>${logBits || log.note ? `📝 Registre: ${esc(logBits || 'nota')}` : '📝 Registrar'}</summary>
         <form class="subsec logform" data-id="${s.id}">
           <div class="formgrid">
@@ -201,7 +211,8 @@ function sessCard(s) {
           <div class="row"><input type="date" id="mvd-${s.id}" min="${iso(plan.start)}" max="${iso(plan.race)}" value="${iso(d)}" style="max-width:180px"><button class="btn sm" type="button" data-mvpick="${s.id}">Moure</button>${manualMove ? `<button class="btn sm ghost" type="button" data-mv="${s.id}" data-date="">Tornar al seu dia</button>` : ''}</div>
         </div>
       </details>
-      </div>` : ''}
+      ` : ''}
+      </div>
     </div>
   </article>`;
 }
@@ -217,13 +228,15 @@ const actKind = a => {
 function extraCard(a) {
   const d = fromIso(actDate(a)); const k = actKind(a); const km = actKm(a);
   const bits = [km ? `${km1(km)} km` : '', a.moving_time ? fmtH(a.moving_time) : '', a.rpe ? `esforç ${a.rpe}/10` : ''].filter(Boolean).join(' · ');
+  const fe = model.flags.fastExtra[a.id];
   return `<article class="sess t-${k.t} extra is-done">
-    <div class="sess-h"><div><div class="sess-meta"><span class="tchip">Extra · ${k.n}</span><span>${dateLabel(d)}</span></div>
+    <div class="sess-h"><div><div class="sess-meta"><span class="tchip">Extra · ${k.n}</span><span>${dateLabel(d)}</span>${fe ? `<span class="chip warn">⚡ ${fe.label}/km</span>` : ''}${a.note && PAIN_RE.test(a.note) ? '<span class="chip bad">🩹 dolor</span>' : ''}</div>
     <div class="sess-title"><h3>${esc(a.name || (isRunAct(a) ? 'Cursa fora del pla' : k.n))}</h3>${bits ? `<span class="mono small">${bits}</span>` : ''}</div></div>
     <span class="check" aria-hidden="true" style="--tc:var(--t-${k.t});background:var(--tc);border-color:var(--tc);color:#fff">${ICON_CHECK}</span></div>
-    <div class="sess-b">${a.note ? `<p class="small">«${esc(a.note)}»</p>` : ''}
+    <div class="sess-b"><div class="menus"><details class="more menu dmenu"><summary><span>📋 Detall de l'activitat</span></summary><div class="subsec">${a.note ? `<p class="small">«${esc(a.note)}»</p>` : ''}
       <p class="small muted">${isRunAct(a) ? 'Compta als km de la setmana i el pla s\'adapta si cal.' : 'Queda registrada, però no suma km de cursa.'}</p>
       ${isRunAct(a) && canWrite() ? assignSelect(a, weekOfDate(plan, d)) : ''}${canWrite() ? `<div class="row"><button class="btn sm ghost danger" data-delact="${a.id}">Esborrar activitat</button></div>` : ''}
+    </div></details></div>
     </div></article>`;
 }
 
@@ -281,6 +294,20 @@ function statsHtml() {
   </div>`;
 }
 
+function alertsHtml() {
+  const t = today0(); const from = addDays(t, -7);
+  const fl = model.flags; const items = [];
+  const fastS = Object.keys(fl.fast).map(id => plan.byId[id]).filter(s => model.date(s) >= from);
+  const fastE = model.extras.filter(a => fl.fastExtra[a.id] && fromIso(actDate(a)) >= from);
+  const n = fastS.length + fastE.length;
+  if (n) items.push(`<li><b>⚡ ${n} ${n > 1 ? 'sortides' : 'sortida'} massa ràpides els últims 7 dies</b> (${[...fastS.map(s => `${DAYS[(model.date(s).getDay() + 6) % 7]} ${fl.fast[s.id].label}`), ...fastE.map(a => `${DAYS[(fromIso(actDate(a)).getDay() + 6) % 7]} ${fl.fastExtra[a.id].label}`)].join(', ')}). El suau és ${fmt(fl.easy.suLow)}–${fmt(fl.easy.suHigh)}/km: així no es puja volum.</li>`);
+  const pn = fl.pain.filter(p => fromIso(p.date) >= addDays(t, -14));
+  if (pn.length) items.push(`<li><b>🩹 Dolor anotat el ${dShort(fromIso(pn[pn.length - 1].date))}</b> («${esc(pn[pn.length - 1].note)}»). El pla està descarregat. Si torna, para aquell dia; si persisteix, fisio.${canWrite() ? ` <button class="btn sm" data-painok="1">✓ Ja estic bé</button>` : ''}</li>`);
+  const prev = model.weekInfo[model.curWeek - 1];
+  if (prev && prev.gymTotal && !prev.gymDone) items.push(`<li><b>🏋️ La setmana passada, cap sessió de gimnàs.</b> És la millor prevenció per al genoll: fes com a mínim el Gimnàs A.</li>`);
+  return items.length ? `<div class="card alerts"><span class="eyebrow">Avisos</span><ul>${items.join('')}</ul></div>` : '';
+}
+
 function renderAvui() {
   const t = today0(); const daysLeft = Math.max(0, Math.round((plan.race - t) / DAY));
   const todayS = modelSessionsOn(plan, model, t).sort((a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot));
@@ -300,6 +327,7 @@ function renderAvui() {
       ${trackSvg()}
     </section>
     <div class="a-main">
+    ${alertsHtml()}
     <div class="row between"><h2>Avui</h2><span class="muted small">${DAYS_L[(t.getDay() + 6) % 7]} ${catDate(t)}</span></div>
     ${todayS.length ? todayS.map(sessCard).join('') : `<div class="rest"><b>Descans</b><span>${next ? `Següent: ${next.ss.map(s => esc(model.title(s))).join(' + ')} · ${dateLabel(next.d)}` : 'Gaudeix-ne.'}</span></div>`}
     ${extrasToday.map(extraCard).join('')}
@@ -680,6 +708,7 @@ view.addEventListener('click', async e => {
     await act(() => store.saveMove(data, ds.mvpick, v), `Moguda al ${dm(d)}`);
     location.hash = 'setmana/' + viewWeek; return;
   }
+  if (ds.painok) return act(() => store.saveSettings(data, { pain_clear: todayIso() }), 'Perfecte: el pla torna a la normalitat ✓');
   if (ds.fds) return act(() => store.saveWeek(data, +ds.fds, ds.v === '1'), ds.v === '1' ? 'Tirada llarga a diumenge' : 'Tirada llarga a dissabte');
   if (ds.goal) return act(() => store.saveSettings(data, { goal_pace: +ds.goal }), 'Objectiu actualitzat');
   if (ds.deltest) { if (confirm('Esborrar aquest test?')) return act(() => store.deleteTest(data, ds.deltest), 'Test esborrat'); return; }
@@ -728,7 +757,11 @@ view.addEventListener('submit', async e => {
     if (Number.isNaN(secs)) return toast('Els segons han d\'anar de 0 a 59');
     if (fd.get('km') && km == null) return toast('Escriu els km amb números (6,5 o 6.5)');
     const row = { done: (cur.done && !cur.skipped) || !!(km || secs), skipped: !!cur.skipped && !(km || secs), km, min: secs ? Math.round(secs / 60 * 100) / 100 : null, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null };
-    return act(() => store.saveLog(data, id, row), 'Desat ✓');
+    const sx = plan.byId[id]; let msg = 'Desat ✓';
+    const lim = model.flags.easy.suLow - 15;
+    if (sx && (sx.type === 'e' || sx.type === 'l') && km >= 2 && secs && secs / km < lim) msg = `Desat. ⚡ ${fmt(secs / km)}/km és massa ràpid per a un suau (${fmt(model.flags.easy.suLow)}–${fmt(model.flags.easy.suHigh)}/km). Els suaus, a ritme de conversa.`;
+    if (row.note && PAIN_RE.test(row.note)) msg = 'Desat. 🩹 Dolor anotat: el pla es descarrega. Si persisteix o et fa canviar la gambada, para i consulta el fisio.';
+    return act(() => store.saveLog(data, id, row), msg);
   }
   if (f.id === 'addForm') {
     const date = f.dataset.date; const type = fd.get('type'); const km = numIn(fd.get('km')); const secs = readTime(fd);
@@ -738,7 +771,10 @@ view.addEventListener('submit', async e => {
       distance: km ? Math.round(km * 1000) : 0, moving_time: secs || null, elapsed_time: secs || null,
       session_id: 'none', ignored: false, rpe: fd.get('rpe') ? +fd.get('rpe') : null, note: String(fd.get('note') || '').slice(0, 500) || null, source: 'manual' };
     addOpen = null;
-    return act(() => store.addActivities(data, [a]), 'Activitat afegida ✓');
+    let msg = 'Activitat afegida ✓';
+    if (type === 'Run' && km >= 2 && secs && secs / km < model.flags.easy.suLow - 15) msg = `Afegida. ⚡ ${fmt(secs / km)}/km és ritme dur: compte a encadenar-lo amb altres dies ràpids.`;
+    if (a.note && PAIN_RE.test(a.note)) msg = 'Afegida. 🩹 Dolor anotat: el pla es descarrega. Si persisteix, consulta el fisio.';
+    return act(() => store.addActivities(data, [a]), msg);
   }
   if (f.id === 'testForm') {
     const secs = readTime(fd); if (!secs || Number.isNaN(secs)) return toast('Escriu el temps: minuts i segons (0–59)');

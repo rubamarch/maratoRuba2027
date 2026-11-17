@@ -13,8 +13,15 @@
 //  · Dia extra (activitat fora del pla) → compta als km; si la sessió de qualitat següent és en ≤ 2 dies, es suavitza.
 //  · Afinament (setmanes 23–25), tests i curses: mai no s'hi suma volum.
 //  · La tirada llarga mai supera els 32 km.
+//  · Dolor anotat (a les notes) → la setmana següent −15 % i cap pujada de volum durant 2 setmanes.
+//  · Rodatges suaus massa ràpids o setmana sense gimnàs → no es puja volum (encara que facis més km).
 
 import { DAY, iso, fromIso, addDays, isRun, isActive, effDate, catDate, DAYS_L } from './plan.js';
+import { zones, fmt } from './pace.js';
+
+// Paraules que indiquen dolor o lesió a les notes (català i castellà).
+export const PAIN_RE = /(\bmal\b|dolor|duele|\bdol\b|mol[eè]s|lesi[oóò]|punxad|tendin|r[oò]tula|esquin[cç]|contractur|sobrecàrrega|sobrecarga)/i;
+const FAST_MARGIN = 15;   // s/km més ràpid que el límit inferior del ritme suau = rodatge massa ràpid
 
 const M_MIN = 0.75, M_MAX = 1.10, LONG_MAX = 32, TAPER_FROM = 23;
 const round05 = x => Math.round(x * 2) / 2;
@@ -143,8 +150,40 @@ export function computeModel(plan, data, todayIso) {
     }
   }
 
+  // ---- Senyals d'alerta: rodatges suaus massa ràpids, dies extra ràpids i dolor ----
+  const Zp = zones(data.tests || [], data.settings.goal_pace || 300);
+  const fastLimit = Zp.suLow - FAST_MARGIN;
+  const fast = {}, fastExtra = {}, pain = [];
+  const painClear = data.settings.pain_clear ? fromIso(data.settings.pain_clear) : null;   // "Ja estic bé": el dolor anterior no compta
+  const timeOf = s => { const l = data.logs[s.id]; if (l && l.min) return +l.min * 60; return (match[s.id] || []).reduce((a, x) => a + (+x.moving_time || 0), 0) || null; };
+  for (const s of plan.sessions) {
+    const l = data.logs[s.id]; const d = sDate(s);
+    if (d > today) continue;
+    if ((s.type === 'e' || s.type === 'l') && done(s.id)) {
+      const km = sessionKm(s), t = timeOf(s);
+      if (km >= 2 && t) { const p = t / km; if (p < fastLimit) fast[s.id] = { pace: p, limit: Zp.suLow, label: fmt(p) }; }
+    }
+    if (l && l.note && PAIN_RE.test(l.note) && !(painClear && d <= painClear)) pain.push({ id: s.id, week: s.week, date: iso(d), note: l.note });
+  }
+  for (const a of extras) {
+    const d = fromIso(actDate(a)); if (d > today) continue;
+    const wk = Math.floor(Math.round((d - plan.start) / DAY) / 7) + 1;
+    if (isRunAct(a) && actKm(a) >= 2 && +a.moving_time && a.moving_time / actKm(a) < fastLimit) fastExtra[a.id] = { pace: a.moving_time / actKm(a), label: fmt(a.moving_time / actKm(a)) };
+    if (a.note && PAIN_RE.test(a.note) && !(painClear && d <= painClear)) pain.push({ id: String(a.id), week: wk, date: actDate(a), note: a.note });
+  }
+  let painHold = 0;   // fins a quina setmana no es pot pujar volum per dolor
+
   // ---- Multiplicador de volum setmana a setmana ----
   let m = 1; const oneOff = {};
+  // Dolor anotat aquesta setmana: la resta de la setmana es descarrega ja
+  const painNow = pain.filter(p => p.week === curWeek);
+  if (adaptOn && painNow.length) {
+    oneOff[curWeek] = 0.85; painHold = curWeek + 1;
+    history.push({ week: curWeek, kind: 'down', text: `Has anotat dolor el ${dayName(fromIso(painNow[0].date))} («${painNow[0].note.slice(0, 60)}»): la resta de la setmana es descarrega un 15 % i les sessions de qualitat es fan suaus. Si persisteix, para i consulta el fisio.` });
+    for (const s of plan.sessions.filter(x => x.week === curWeek && x.type === 'q' && !done(x.id) && sDate(x) >= fromIso(painNow[0].date))) {
+      (adj[s.id] ||= { notes: [] }).soft = true; adj[s.id].notes.push('Dolor anotat aquesta setmana: fes-la a ritme suau o no la facis.');
+    }
+  }
   for (const W of plan.weeks) {
     const w = W.n;
     const f = adaptOn ? (w >= TAPER_FROM ? Math.min(m, 1) : m) * (oneOff[w] || 1) : 1;
@@ -171,18 +210,28 @@ export function computeModel(plan, data, todayIso) {
     const rpe = rpes.length ? rpes.reduce((a, b) => a + b, 0) / rpes.length : null;
     const keyMissed = sess.filter(s => ['l', 'q', 't'].includes(s.type) && !done(s.id)).length;
     const ended = plan.dateOf(w, 6) < today;
-    weekInfo[w] = { planned, actual, factor: f, rpe, keyMissed, ended, extras: wkExtras };
+    const fastN = sess.filter(s => fast[s.id]).length + wkExtras.filter(a => fastExtra[a.id]).length;
+    const painW = pain.filter(p => p.week === w);
+    const gymS = sess.filter(s => s.type === 'g'); const gymDone = gymS.filter(s => done(s.id)).length;
+    weekInfo[w] = { planned, actual, factor: f, rpe, keyMissed, ended, extras: wkExtras, fastN, pain: painW, gymDone, gymTotal: gymS.length };
 
     if (!adaptOn || !ended || w >= 25) continue;
     const r = planned > 0 ? actual / planned : 1;
     const pct = v => `${Math.round(v * 100)} %`;
     const before = m;
     let text = null;
-    if (planned > 0 && actual < 0.3 * planned) {
+    const why = [];
+    if (fastN) why.push(`${fastN} ${fastN > 1 ? 'rodatges suaus massa ràpids' : 'rodatge suau massa ràpid'} (suau: ${fmt(Zp.suLow)}–${fmt(Zp.suHigh)}/km)`);
+    if (gymS.length && !gymDone) why.push('cap sessió de gimnàs');
+    const blockUp = painW.length > 0 || why.length > 0 || painHold > w;
+    if (painW.length) {
+      oneOff[w + 1] = Math.min(oneOff[w + 1] || 1, 0.85); m = Math.min(m, 1); painHold = Math.max(painHold, w + 2);
+      text = `Setmana ${w}: has anotat dolor el ${dayName(fromIso(painW[0].date))} («${painW[0].note.slice(0, 60)}»). La ${w + 1} es descarrega un 15 % i no es puja volum fins a la ${w + 3}. Si persisteix, consulta el fisio.`;
+    } else if (planned > 0 && actual < 0.3 * planned) {
       const next = plan.weeks[w];
       const pk = plan.sessions.filter(s => s.week === w && isRun(s.type)).reduce((a, s) => a + s.km, 0);
       const nk = plan.sessions.filter(s => s.week === next.n && isRun(s.type)).reduce((a, s) => a + s.km, 0);
-      if (nk > 0) oneOff[w + 1] = Math.min(1, pk / nk);
+      if (nk > 0) oneOff[w + 1] = Math.min(oneOff[w + 1] || 1, 1, pk / nk);
       m = Math.max(M_MIN, m * 0.95);
       text = `Setmana ${w} gairebé sense fer (${km1(actual)} de ${km1(planned)} km): la ${w + 1} repeteix el volum de la ${w}.`;
     } else if (r < 0.7) {
@@ -192,12 +241,18 @@ export function computeModel(plan, data, todayIso) {
       m = Math.max(M_MIN, m * 0.95);
       text = keyMissed >= 2 ? `Setmana ${w}: ${keyMissed} sessions clau sense fer. Abaixem una mica.` : `Setmana ${w} al ${pct(r)} del volum: abaixem una mica.`;
     } else if (rpe != null && rpe >= 8) {
-      oneOff[w + 1] = 0.9;
+      oneOff[w + 1] = Math.min(oneOff[w + 1] || 1, 0.9);
       text = `Setmana ${w} amb esforç mitjà ${rpe.toFixed(1)}/10: la ${w + 1} es descarrega un 10 % per fatiga.`;
+    } else if (r > 1.15 && blockUp) {
+      m = Math.min(m, 1);
+      text = `Setmana ${w} al ${pct(r)} del volum, però ${why.length ? why.join(' i ') : 'encara amb dolor recent'}: no pugem volum. Primer, suaus de veritat${gymS.length && !gymDone ? ' i el gimnàs' : ''}.`;
     } else if (r > 1.15) {
       m = Math.min(M_MAX, m * 1.05);
       text = `Setmana ${w} al ${pct(r)} del volum amb bones sensacions: pugem amb prudència.`;
-    } else if (rpe != null && rpe <= 4 && keyMissed === 0) {
+    } else if (blockUp && why.length) {
+      m = Math.min(m, 1);
+      text = `Setmana ${w}: ${why.join(' i ')}. No pugem volum fins que els suaus siguin suaus.`;
+    } else if (rpe != null && rpe <= 4 && keyMissed === 0 && !blockUp) {
       m = Math.min(M_MAX, m * 1.03);
       text = `Setmana ${w} completa i fàcil (esforç ${rpe.toFixed(1)}/10): pugem una mica.`;
     } else if (m < 1 && r >= 0.95) {
@@ -206,7 +261,7 @@ export function computeModel(plan, data, todayIso) {
     }
     if (text) history.push({ week: w + 1, kind: m > before ? 'up' : m < before || oneOff[w + 1] ? 'down' : 'info', text: text + ` (volum ${pct(m)} del pla)` });
   }
-  if (adaptOn && m >= M_MAX - 0.001) history.push({ week: curWeek, kind: 'info', text: 'Vas sobrat: si encara no l\'has fet, fes el pròxim test per ajustar els ritmes.' });
+  if (adaptOn && m >= M_MAX - 0.001 && painHold < curWeek && !(weekInfo[curWeek - 1]?.fastN)) history.push({ week: curWeek, kind: 'info', text: 'Vas sobrat: si encara no l\'has fet, fes el pròxim test per ajustar els ritmes.' });
 
   // ---- Notes de sessions recol·locades / perdudes ----
   for (const [id, a] of Object.entries(auto)) {
@@ -218,6 +273,7 @@ export function computeModel(plan, data, todayIso) {
 
   return {
     todayIso, curWeek, adaptOn, moves, auto, adj, match, extras, history, weekInfo,
+    flags: { fast, fastExtra, pain, easy: Zp, painHold },
     date: s => effDate(plan, s, moves, data.weeks),
     done, sessionKm,
     active: s => isActive(s, data.weeks) && !auto[s.id]?.dropped,

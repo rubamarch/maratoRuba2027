@@ -506,3 +506,17 @@ input[name="km"] { font-family: var(--f-mono); font-size: 16px; }
 .guide-grid div { padding: 12px 14px; border-radius: 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 4px; }
 .guide-grid b { font-family: var(--f-disp); font-size: 15px; }
 .guide-grid p { font-size: 14px; color: var(--ink-2); }
+
+/* v6 · desplegable de detall i avisos */
+.dmenu > summary { gap: 10px; }
+.dmenu > summary > span:first-child { flex: none; }
+.sum-mini { margin-left: auto; margin-right: 6px; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dmenu .subsec { gap: 14px; }
+.dmenu .fitxa .kpis div { background: var(--surface); }
+.dmenu .struct li { background: var(--surface); }
+.dmenu .struct li.is-main { background: color-mix(in srgb, var(--zc) 10%, var(--surface)); }
+.dmenu .eqbox, .dmenu .actbox { background: var(--surface); }
+.alerts { border-left: 4px solid var(--warn); }
+.alerts ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.alerts li { font-size: 14.5px; color: var(--ink-2); }
+.alerts li .btn { margin-top: 6px; }
