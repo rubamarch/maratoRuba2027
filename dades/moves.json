@@ -6,5 +6,13 @@
     {
         "session_id": "w2-sat",
         "date": "2026-11-13"
+    },
+    {
+        "session_id": "w3-tue-gym",
+        "date": "2026-11-18"
+    },
+    {
+        "session_id": "w3-tue",
+        "date": "2026-11-19"
     }
 ]
