@@ -19,7 +19,7 @@ export const TYPES = {
   r: { n: 'Cursa', icon: '🏅' }
 };
 export const isRun = t => ['q', 'e', 'l', 't', 'r'].includes(t);
-export const SLOT_ORDER = ['mon', 'tue', 'tue-gym', 'wed', 'thu', 'thu-gym', 'fri', 'padel-fds', 'sat', 'sun'];
+export const SLOT_ORDER = ['mon', 'mon-gym', 'tue', 'tue-gym', 'wed', 'thu', 'thu-gym', 'fri', 'padel-fds', 'sat', 'sun'];
 
 export const PHASES = [
   { id: 1, n: 'Retorn', w: [1, 6], txt: 'Tornar a córrer sense lesionar-se. Tot per sensacions: has de poder parlar. Construïm tendons i hàbit. El pàdel torna el {D:3:2}.' },
@@ -45,6 +45,11 @@ const GYM_B = {
   4: ['Gimnàs B · potència lleugera i core (30′)', '<ul><li>Salts al calaix 3×4 · Skipping 3×20 m</li><li>Core 10′ · Tibial i soli 2×15</li><li>Si dilluns o dimarts van ser durs, fes només el core</li></ul>'],
   5: ['Gimnàs B · mobilitat i core (25′)', '<ul><li>Core suau 10′, mobilitat de maluc, turmell i columna toràcica</li></ul>']
 };
+// A partir d'aquesta setmana el gimnàs sempre va en un dia de rodatge (mai sol ni el dia de la tirada llarga).
+export const GYM_PAIRED_FROM = 4;
+const AFTER_EASY = '<p>Primer el rodatge (fora o a la cinta) i, just després, el gimnàs.</p>';
+const AFTER_Q = '<p>Primer la sessió de qualitat i després la força: mai al revés.</p>';
+
 const PADEL = {
   1: 'Tornada al pàdel. Escalfa 10′ amb trot i mobilitat d\'espatlla. Compta com a sessió d\'intensitat.',
   2: 'Partit o entrenament. És la teva sessió de canvis de ritme i agilitat.',
@@ -206,8 +211,19 @@ export function buildPlan(raceIso = DEFAULT_RACE) {
     const sess = runs.map(r => ({ ...r }));
     const ga = o.gymA === undefined ? phase : o.gymA;
     const gb = o.gymB === undefined ? phase : o.gymB;
-    if (ga) sess.push(S('tue-gym', 1, 'g', GYM_A[ga][0], (runs.some(r => r.slot === 'tue') ? '<p>Si corres al migdia, fes el gimnàs a la tarda.</p>' : '') + GYM_A[ga][1] + SHOULDER));
-    if (gb) sess.push(S('thu-gym', 3, 'g', GYM_B[gb][0], (runs.some(r => r.slot === 'thu') ? '<p>Corre al migdia i gimnàs a la tarda, o just després si et quadra millor.</p>' : '') + GYM_B[gb][1] + SHOULDER));
+    if (n < GYM_PAIRED_FROM) {
+      if (ga) sess.push(S('tue-gym', 1, 'g', GYM_A[ga][0], (runs.some(r => r.slot === 'tue') ? '<p>Si corres al migdia, fes el gimnàs a la tarda.</p>' : '') + GYM_A[ga][1] + SHOULDER));
+      if (gb) sess.push(S('thu-gym', 3, 'g', GYM_B[gb][0], (runs.some(r => r.slot === 'thu') ? '<p>Corre al migdia i gimnàs a la tarda, o just després si et quadra millor.</p>' : '') + GYM_B[gb][1] + SHOULDER));
+    } else {
+      const has = sl => runs.some(r => r.slot === sl && r.type !== 'l' && r.type !== 'r');
+      // Gimnàs A (força): dimarts, amb la qualitat o el rodatge
+      if (ga && has('tue')) { const q = runs.find(r => r.slot === 'tue'); sess.push(S('tue-gym', 1, 'g', GYM_A[ga][0], (q.type === 'q' || q.type === 't' ? AFTER_Q : AFTER_EASY) + GYM_A[ga][1] + SHOULDER)); }
+      // Gimnàs B (core): dijous si hi ha rodatge (des de la S7); si no, dilluns amb el rodatge suau
+      if (gb) {
+        if (has('thu')) sess.push(S('thu-gym', 3, 'g', GYM_B[gb][0], AFTER_EASY + GYM_B[gb][1] + SHOULDER));
+        else if (has('mon')) sess.push(S('mon-gym', 0, 'g', GYM_B[gb][0], AFTER_EASY + GYM_B[gb][1] + SHOULDER));
+      }
+    }
     if (n >= 3 && !o.noPadel) sess.push(S('wed', 2, 'p', 'Pàdel', PADEL[o.padel || phase]));
     if (n >= 3 && !o.noFds) sess.push({ ...S('padel-fds', 5, 'p', 'Pàdel de cap de setmana', PADEL[phase] + ' Per això la tirada llarga va diumenge.'), fds: true });
     for (const s of sess) {

@@ -44,7 +44,8 @@ function objective(s, txt) {
       : 'Resistència: adaptar musculatura, tendons i metabolisme (ús de greixos) a passar moltes hores corrent.';
     case 't': return 'Mesurar la forma actual: el resultat recalcula els ritmes d\'entrenament i la predicció.';
     case 'r': return /marató vies verdes/i.test(t) ? 'El dia D. Executar el pla de ritme i nutrició assajat.' : 'Assaig de competició: ritme, avituallament i rutina prèvia.';
-    case 'g': return /core|estabilitat|mobilitat/.test(t) ? 'Estabilitat del tronc i del maluc: millor transmissió de força i menys lesions.'
+    case 'g': return /prevenció/.test(t) ? 'Prevenció: gemelos, tibials i maluc forts i mòbils per aguantar més volum sense lesions.'
+      : /core|estabilitat|mobilitat/.test(t) ? 'Estabilitat del tronc i del maluc: millor transmissió de força i menys lesions.'
       : /potència/.test(t) ? 'Potència i reactivitat: més rigidesa útil del tendó i gambada més eficient.'
       : 'Força del tren inferior: economia de cursa i prevenció de lesions (genoll, tendó d\'Aquil·les).';
     case 'p': return 'Intensitat amb canvis de direcció: agilitat i potència. Compta com a sessió dura.';
@@ -123,7 +124,7 @@ export function buildFitxa(s, km, title, tests, goal) {
   if (dur) kpis.push(['Durada', `≈ ${dur >= 60 ? `${Math.floor(dur / 60)} h ${String(dur % 60).padStart(2, '0')}′` : `${dur}′`}`]);
   if (run && Zm && P[zoneMain]) kpis.push([zoneMain === 'SU' ? 'Ritme' : Zm.n, `${rng(P[zoneMain])}/km`]);
   if (run && Zm) kpis.push(['Esforç', `RPE ${Zm.rpe}`], ['Zona', `${Zm.z} · ${Zm.hr}`]);
-  if (s.type === 'g') kpis.push(['Esforç', 'RPE 6–7'], ['Focus', /core|mobilitat/i.test(title) ? 'Core' : /potència/i.test(title) ? 'Potència' : 'Força']);
+  if (s.type === 'g') kpis.push(['Esforç', /prevenció|mobilitat/i.test(title) ? 'RPE 3–4' : 'RPE 6–7'], ['Focus', /prevenció/i.test(title) ? 'Prevenció' : /core|mobilitat/i.test(title) ? 'Core' : /potència/i.test(title) ? 'Potència' : 'Força']);
   if (s.type === 'p') kpis.push(['Esforç', 'RPE 7–8'], ['Tipus', 'Intensitat']);
 
   return {
