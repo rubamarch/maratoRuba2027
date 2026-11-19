@@ -108,5 +108,35 @@
         "note": null,
         "updated_at": "2026-11-16T18:17:15.249+00:00",
         "skipped": false
+    },
+    {
+        "session_id": "w3-wed",
+        "done": true,
+        "km": null,
+        "min": 90,
+        "rpe": 5,
+        "note": "Americana padel a nivell mig amb amics.",
+        "updated_at": "2026-11-18T16:29:09.045+00:00",
+        "skipped": false
+    },
+    {
+        "session_id": "w3-tue",
+        "done": true,
+        "km": 4.5,
+        "min": 30,
+        "rpe": 4,
+        "note": null,
+        "updated_at": "2026-11-19T08:09:20.984+00:00",
+        "skipped": false
+    },
+    {
+        "session_id": "w3-thu-gym",
+        "done": false,
+        "km": null,
+        "min": null,
+        "rpe": null,
+        "note": null,
+        "updated_at": "2026-11-19T09:46:25.298173+00:00",
+        "skipped": true
     }
 ]
