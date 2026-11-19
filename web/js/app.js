@@ -558,8 +558,9 @@ function renderRitmes() {
         <li>Experiència en trail: Miner de Ferro, La Cabrona, Oncotrail</li></ul>
         <p class="small muted">Amb aquest punt de partida, 5:30/km és molt assequible i 5:15 és realista. 5:00/km (3:31) demana que els tests de desembre i gener surtin clarament per sota de 22:30 en 5 km o 47:00 en 10 km.</p></div>
       <div class="card"><span class="eyebrow">Setmana tipus</span><ul class="tight">
-        <li><b>Dilluns</b> · rodatge suau (+ gimnàs B a les setmanes 4–6)</li><li><b>Dimarts</b> · qualitat + gimnàs A (força)</li><li><b>Dimecres</b> · pàdel</li>
+        <li><b>Dilluns</b> · rodatge suau</li><li><b>Dimarts</b> · qualitat + gimnàs A (força)</li><li><b>Dimecres</b> · pàdel</li>
         <li><b>Dijous</b> · des de la setmana 7, rodatge suau + gimnàs B (core)</li><li><b>Divendres</b> · descans</li><li><b>Dissabte</b> · tirada llarga, sense gimnàs</li><li><b>Diumenge</b> · descans, o tirada llarga si dissabte jugues</li></ul>
+        <p class="small muted">Setmanes 4–6 (espaiades, sense córrer dos dies seguits): dilluns rodatge + gimnàs B · dimarts descans · dimecres pàdel · dijous rodatge o qualitat + gimnàs A · divendres descans · dissabte llarga.</p>
         <p class="small muted">El gimnàs sempre va el mateix dia que un rodatge (primer córrer i després la força), mai sol ni el dia de la tirada llarga. Pot haver-hi rodatges sense gimnàs.</p></div>
       <div class="card"><span class="eyebrow">Pàdel i espatlla</span><ul class="tight">
         <li>El pàdel compta com a sessió d'intensitat: no el posis el dia abans de la llarga.</li>
