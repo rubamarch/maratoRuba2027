@@ -138,5 +138,35 @@
         "note": null,
         "updated_at": "2026-11-19T09:46:25.298173+00:00",
         "skipped": true
+    },
+    {
+        "session_id": "w3-padel-fds",
+        "done": true,
+        "km": null,
+        "min": null,
+        "rpe": null,
+        "note": null,
+        "updated_at": "2026-11-21T11:37:37.229+00:00",
+        "skipped": false
+    },
+    {
+        "session_id": "w3-sat",
+        "done": true,
+        "km": 4.8,
+        "min": 28.75,
+        "rpe": 5,
+        "note": "Dolor al genoll esquerra. Paro.",
+        "updated_at": "2026-11-22T01:25:22.119+00:00",
+        "skipped": false
+    },
+    {
+        "session_id": "w3-tue-gym",
+        "done": false,
+        "km": null,
+        "min": null,
+        "rpe": null,
+        "note": null,
+        "updated_at": "2026-11-22T01:38:08.857+00:00",
+        "skipped": true
     }
 ]
