@@ -168,5 +168,15 @@
         "note": null,
         "updated_at": "2026-11-22T01:38:08.857+00:00",
         "skipped": true
+    },
+    {
+        "session_id": "w4-wed",
+        "done": false,
+        "km": null,
+        "min": null,
+        "rpe": null,
+        "note": null,
+        "updated_at": "2026-11-24T10:22:40.892+00:00",
+        "skipped": true
     }
 ]

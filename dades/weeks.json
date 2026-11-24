@@ -2,5 +2,9 @@
     {
         "week": 3,
         "padel_sat": true
+    },
+    {
+        "week": 4,
+        "padel_sat": false
     }
 ]
